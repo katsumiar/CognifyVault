@@ -1,0 +1,5 @@
+Flask
+weaviate-client
+openai
+pdfplumber
+markdown
