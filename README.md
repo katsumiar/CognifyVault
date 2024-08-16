@@ -1,6 +1,7 @@
+[![Go to Wiki](https://img.shields.io/badge/Go%20to-Wiki-brightgreen)](https://github.com/katsumiar/CognifyVault/wiki)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/katsumiar/CognifyVault/blob/main/LICENSE)
 
-![image](https://github.com/user-attachments/assets/b26e440e-69eb-4e3c-8875-ae36e4eb77e2)
+![image](https://github.com/user-attachments/assets/0e401311-1039-4713-ae76-d6570899f858)
 
 # CognifyVault
 
