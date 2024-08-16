@@ -233,76 +233,71 @@ def read_file_content(file_path):
         print(f"Error reading file content for {file_path}: {e}")
         raise
 
-def summarize_text(text):
-    # Generate a summary of the provided text using OpenAI.
+def call_openai_api(model, system_content, user_content, function_name="Unknown Function"):
+    # Generalized function to call OpenAI API with given parameters.
     try:
         response = openai_client.chat.completions.create(
-            model=support_llm_model,
+            model=model,
             messages=[
-                {"role": "system", "content": system_role},
-                {"role": "user", "content": f"# Instructions\nPlease extract the following information from the document below:\n- Keywords that serve as an index for the document\n- Summarize each chapter, organizing the content into appropriate sections\n# Document\n{text}"}
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content}
             ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Error occurred while generating summary: {e}")
+        print(f"Error occurred during OpenAI API call in {function_name}: {e}")
         return None
+
+def summarize_text(text):
+    # Generate a summary of the provided text using OpenAI.
+    user_content = (
+        f"# Instructions\nPlease extract the following information from the document below:\n"
+        f"- Keywords that serve as an index for the document\n"
+        f"- Summarize each chapter, organizing the content into appropriate sections\n"
+        f"# Document\n{text}"
+    )
+    return call_openai_api(support_llm_model, system_role, user_content, function_name="summarize_text")
 
 def make_report(request_text, references_text):
     # Generate a report based on user request and supplementary materials using OpenAI.
-    try:
-        user_intent = extract_user_intent(request_text)
-        if user_intent:
-            response = openai_client.chat.completions.create(
-                model=llm_model,
-                messages=[
-                    {"role": "system", "content": system_role},
-                    {"role": "user", "content": f"## Instructions\nRespond to the request in the requester's language based on the supporting materials provided. \n## Request\n{request_text}\n## User Intent\n{user_intent}\n## Supporting Materials\n{references_text}"}
-                ]
+    user_intent = extract_user_intent(request_text)
+    base_user_content = (
+        f"## Instructions\nRespond to the request in the requester's language based on the supporting materials provided.\n"
+        f"## Request\n{request_text}\n"
+    )
+    
+    if user_intent:
+        base_user_content += f"## User Intent\n{user_intent}\n## Supporting Materials\n{references_text}"
+        return call_openai_api(llm_model, system_role, base_user_content, function_name="make_report")
+    else:
+        base_user_content += f"## Supporting Materials\n{references_text}"
+        first_response = call_openai_api(llm_model, system_role, base_user_content, function_name="make_report")
+        
+        if first_response:
+            proofread_user_content = (
+                f"{base_user_content}"
+                f"\n{first_response}\n"
+                "Please proofread for any issues. Write only the revised text.\n"
+                "# output\nRevised text"
             )
-            return response.choices[0].message.content.strip()
-        else:
-            response = openai_client.chat.completions.create(
-                model=llm_model,
-                messages=[
-                    {"role": "system", "content": system_role},
-                    {"role": "user", "content": f"## Instructions\nI will respond to the request in the requester's language based on the supporting materials provided, ensuring that no important requirements or elements are omitted.\n## Request\n{request_text}\n## Supporting Materials\n{references_text}"}
-                ]
-            )
-            return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error occurred while generating repot: {e}")
+            return call_openai_api(llm_model, system_role, proofread_user_content, function_name="make_report")
         return None
 
 def extract_user_intent(request_text):
     # Interprets the text to clarify what the user intends.
-    try:
-        response = openai_client.chat.completions.create(
-            model=support_llm_model,
-            messages=[
-                {"role": "system", "content": system_role},
-                {"role": "user", "content": f"Please interpret the following user request and clarify the user's intent. It is okay to make educated guesses.\n## User Request\n{request_text}"}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error occurred while generating user intent: {e}")
-        return None
+    user_content = (
+        f"Please interpret the following user request and clarify the user's intent. "
+        f"It is okay to make educated guesses.\n## User Request\n{request_text}"
+    )
+    return call_openai_api(support_llm_model, system_role, user_content, function_name="extract_user_intent")
 
 def generate_search_keywords(prompt):
     # Generate search keywords using OpenAI for vector database query.
-    try:
-        response = openai_client.chat.completions.create(
-            model=support_llm_model,
-            messages=[
-                {"role": "system", "content": system_role},
-                {"role": "user", "content": f"Generate suitable search keywords for querying a vector database to accomplish the following request. Separate multiple keywords with commas.\n---\n{prompt}"}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error occurred while generating search ward: {e}")
-        return None
+    user_content = (
+        f"Generate suitable search keywords for querying a vector database to accomplish the following request. "
+        f"Separate multiple keywords with commas.\n---\n{prompt}"
+    )
+    return call_openai_api(support_llm_model, system_role, user_content, function_name="generate_search_keywords")
 
 if __name__ == '__main__':
     # Ensure the upload directory exists
