@@ -4,7 +4,7 @@
 
 # CognifyVault
 
-CognifyVault is a knowledge management and search support tool that allows users to register knowledge, generate information based on questions, and summarize files using the OpenAI API. Additionally, it leverages Weaviate for efficient vector searches to find relevant knowledge.
+Register knowledge and files in a vector database, and generate information based on questions using the OpenAI API. This knowledge management and search support tool efficiently searches for relevant knowledge through vector search powered by Weaviate.
 
 ## Features
 - **Knowledge Registration**: Register knowledge by directly entering text or uploading files (supports `.txt` and `.pdf` formats).
