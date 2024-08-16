@@ -206,7 +206,7 @@ def search():
 
         # Generate a report using the search prompt and supplementary materials
         report_markdown = make_report(prompt, supplementary_text)
-        report_html = markdown.markdown(report_markdown)  # Convert Markdown to HTML
+        report_html = markdown.markdown(report_markdown, extensions=['nl2br'])  # Convert Markdown to HTML
 
         return render_template('index.html', articles=articles, report=report_html)
     except Exception as e:
