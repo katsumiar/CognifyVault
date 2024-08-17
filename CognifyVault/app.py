@@ -243,17 +243,14 @@ def read_file_content(file_path):
 def call_openai_api(model, contents=None, function_name="Unknown Function"):
     # Generalized function to call OpenAI API with given parameters.
     try:
-        # メッセージリストを初期化
         messages = []
 
-        # contentsが指定されている場合、それを交互にメッセージリストに追加
         if contents:
             for i, content in enumerate(contents):
                 if content is not None:
                     role = "system" if i % 2 == 0 else "user"
                     messages.append({"role": role, "content": content})
 
-        # OpenAI API を呼び出す
         response = openai_client.chat.completions.create(
             model=model,
             messages=messages
