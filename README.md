@@ -13,6 +13,25 @@ Register knowledge and files in a vector database, and generate information base
 - **File Summarization**: Automatically generate summaries for uploaded files using the OpenAI API.
 - **Vector Search**: Efficiently search through knowledge using Weaviate's vector-based search capabilities.
 
+## Report Generation Feature
+
+This application offers an advanced report generation feature that creates detailed reports based on user requests. Unlike simple text generation, this feature intelligently analyzes the provided documents and articles to produce reports that align closely with the user's intent.
+
+### 1. Information Extraction Using Vector Search
+First, the application automatically extracts relevant information from the provided materials (such as articles or documents). This process utilizes vector search technology, which considers the semantic relationships between words and phrases, ensuring that the most relevant content is selected in response to the user's request.
+
+### 2. Understanding and Reflecting User Intent
+Next, the application interprets the user's request to understand their intent. This step goes beyond surface-level processing and delves into what the user is truly asking for, ensuring that the report is constructed in a way that accurately reflects the user's needs.
+
+### 3. Report Generation and Proofreading
+Based on the extracted information and the interpreted user intent, the application generates a report. The generated report is then further proofread to verify the accuracy of numbers, names, translation quality, and the appropriateness of the format. This process ensures that the final document is of high quality.
+
+### 4. Accuracy and Cost
+This approach involves multiple invocations of large language models (LLMs), which increases processing costs. However, the precision and quality of the resulting reports are significantly enhanced, meeting the user's expectations. While the cost is higher, the end result is a highly reliable document.
+
+### Conclusion
+The report generation feature of this application is designed to provide accurate, high-quality reports that meet the user's intent. By employing a multi-step process and multiple LLM calls, we ensure that, despite the higher cost, the user receives valuable and reliable results.
+
 ## Supported File Formats
 - **Text Files (`.txt`)**
 - **PDF Files (`.pdf`)**
