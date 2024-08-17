@@ -153,7 +153,7 @@
                     Drag and drop knowledge files
                 </div>
                 <div class="file-name" id="fileName"></div>
-                <input type="file" name="file" id="fileInput" style="display:none;">
+                <input type="file" name="file" id="fileInput" style="display:none;" accept=".txt,.pdf,.md">
                 <button type="submit" class="button">Register</button>
             </form>
 
@@ -248,7 +248,7 @@
                     // Set the file name as the title
                     document.querySelector('input[name="title"]').value = file.name;
 
-                    if (file.type === 'text/plain' || file.type === 'application/pdf') {
+                    if (file.type === 'text/plain' || file.type === 'application/pdf' || file.name.endsWith('.md')) {
                         // Disable form and show loading indicator
                         document.querySelector('.container').classList.add('disabled');
                         document.getElementById('loadingIndicator').style.display = 'flex';

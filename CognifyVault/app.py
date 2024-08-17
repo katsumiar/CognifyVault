@@ -225,6 +225,9 @@ def read_file_content(file_path):
         if file_extension.lower() == '.txt':
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
+        elif file_extension.lower() == '.md':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
         elif file_extension.lower() == '.pdf':
             with pdfplumber.open(file_path) as pdf:
                 text = ''
