@@ -177,15 +177,27 @@ def download_file():
 def search():
     # Handle search requests and display relevant articles.
     prompt = request.form['prompt']
+     
+    # Get the current local time and format it
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Append the local time to the prompt with a label indicating it's local time
+    prompt = f"{prompt}\n\nLocal Time: {current_time}"
+  
+    search_keywords = generate_search_keywords(prompt)
+
+    if search_keywords is None:
+        flash("Failed to generate search keywords.", "error")
+        return redirect(url_for('index'))
+
+    keywords = [keyword.strip() for keyword in search_keywords.split(',')]
     
-    ward = generate_search_keywords(prompt)
     try:
         result = (
             client.query
             .get(target_class_name, ["title", "content", "file_path"])
             .with_near_text({
-                "concepts": [ward],
-                "distance": 0.2
+                "concepts": keywords,
+                "distance": 0.2 # The closer the value is to 0, the better it matches the keywords.
             })
             .do()
         )
@@ -260,8 +272,6 @@ def summarize_text(text):
 
 def make_report(request_text, articles):
     # Generate a report based on user request and supplementary materials using OpenAI.
-    user_intent = extract_user_intent(request_text)
-
     references_text = ""
     for article in articles:
         file_path = article.get('file_path')
@@ -277,7 +287,7 @@ def make_report(request_text, articles):
                 f"{file_content}\n"
             )
             file_content = call_openai_api(support_llm_model, contents=[system_role, extract_matching_content], function_name="make_report")
-            references_text += f"### {file_name}\n{file_content}\n"
+            references_text += f"### file:{file_name}\n{file_content}\n"
 
     base_user_content = (
         f"## Instructions\n"
@@ -285,6 +295,7 @@ def make_report(request_text, articles):
         f"## Request\n"
         f"{request_text}\n"
     )
+    user_intent = extract_user_intent(request_text)
     if user_intent:
         base_user_content += f"## User Intent\n{user_intent}\n## Supporting Materials\n{references_text}"
         return call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
@@ -301,7 +312,8 @@ def make_report(request_text, articles):
                 f"- Does it align with the intended purpose?\n"
                 f"- Is the format appropriate?\n"
                 f"- Are there any omissions or missing elements?\n"
-                f"## output\nRevised text\n"
+                f"## output\n"
+                f"Revised text\n"
             )
             return call_openai_api(llm_model, contents=[system_role, base_user_content, first_response, proofread_user_content], function_name="make_report")
         return None
@@ -309,16 +321,23 @@ def make_report(request_text, articles):
 def extract_user_intent(request_text):
     # Interprets the text to clarify what the user intends.
     user_content = (
-        f"Please interpret the following user request and clarify the user's intent. "
-        f"It is okay to make educated guesses.\n## User Request\n{request_text}"
+        f"## Instruction\n"
+        f"Interpret the following user request and clarify the user's intent (it's okay to make educated guesses).\n"
+        f"Additionally, based on the user's intent, suggest any necessary perspectives to consider.\n"
+        f"## User Request\n"
+        f"{request_text}\n"
     )
     return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="extract_user_intent")
 
 def generate_search_keywords(prompt):
     # Generate search keywords using OpenAI for vector database query.
     user_content = (
-        f"Generate suitable search keywords for querying a vector database to accomplish the following request. "
-        f"Separate multiple keywords with commas.\n---\n{prompt}"
+        f"## Instruction\n"
+        f"Generate appropriate objectives and search keywords for querying a vector database to find materials that would be helpful for the user's request.\n"
+        f"## User request\n"
+        f"{prompt}\n"
+        f"## output\n"
+        f"List your objectives and keywords, separated by commas.\n"
     )
     return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="generate_search_keywords")
 
