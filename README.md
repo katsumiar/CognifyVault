@@ -29,9 +29,6 @@ Based on the extracted information and the interpreted user intent, the applicat
 ### 4. Accuracy and Cost
 This approach involves multiple invocations of large language models (LLMs), which increases processing costs. However, the precision and quality of the resulting reports are significantly enhanced, meeting the user's expectations. While the cost is higher, the end result is a highly reliable document.
 
-### Conclusion
-The report generation feature of this application is designed to provide accurate, high-quality reports that meet the user's intent. By employing a multi-step process and multiple LLM calls, we ensure that, despite the higher cost, the user receives valuable and reliable results.
-
 ## Supported File Formats
 - **Text Files (`.txt`)**
 - **PDF Files (`.pdf`)**
