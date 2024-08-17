@@ -195,17 +195,9 @@ def search():
         if not articles:
             flash("No search results found.", "info")
             return redirect(url_for('index'))
-        
-        supplementary_text = "## Supplementary Materials\n"
-        for article in articles:
-            file_path = article.get('file_path')
-            if file_path:
-                file_content = read_file_content(file_path)
-                file_name = os.path.basename(file_path)
-                supplementary_text += f"### {file_name}\n{file_content}\n"
 
-        # Generate a report using the search prompt and supplementary materials
-        report_markdown = make_report(prompt, supplementary_text)
+        # Generate a report using the search prompt and references text
+        report_markdown = make_report(prompt, articles)
         report_html = markdown.markdown(report_markdown, extensions=['nl2br'])  # Convert Markdown to HTML
 
         return render_template('index.html', articles=articles, report=report_html)
@@ -233,15 +225,23 @@ def read_file_content(file_path):
         print(f"Error reading file content for {file_path}: {e}")
         raise
 
-def call_openai_api(model, system_content, user_content, function_name="Unknown Function"):
+def call_openai_api(model, contents=None, function_name="Unknown Function"):
     # Generalized function to call OpenAI API with given parameters.
     try:
+        # メッセージリストを初期化
+        messages = []
+
+        # contentsが指定されている場合、それを交互にメッセージリストに追加
+        if contents:
+            for i, content in enumerate(contents):
+                if content is not None:
+                    role = "system" if i % 2 == 0 else "user"
+                    messages.append({"role": role, "content": content})
+
+        # OpenAI API を呼び出す
         response = openai_client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content}
-            ]
+            messages=messages
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
@@ -256,31 +256,54 @@ def summarize_text(text):
         f"- Summarize each chapter, organizing the content into appropriate sections\n"
         f"# Document\n{text}"
     )
-    return call_openai_api(support_llm_model, system_role, user_content, function_name="summarize_text")
+    return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="summarize_text")
 
-def make_report(request_text, references_text):
+def make_report(request_text, articles):
     # Generate a report based on user request and supplementary materials using OpenAI.
     user_intent = extract_user_intent(request_text)
+
+    references_text = ""
+    for article in articles:
+        file_path = article.get('file_path')
+        if file_path:
+            file_name = os.path.basename(file_path)
+            file_content = read_file_content(file_path)
+            extract_matching_content = (
+                f"## Instruction\n"
+                f"Please extract the relevant parts from the Supporting Materials that are useful for the user's request while maintaining consistency.\n"
+                f"## User's Request\n"
+                f"{request_text}\n"
+                f"## Supporting Materials\n"
+                f"{file_content}\n"
+            )
+            file_content = call_openai_api(support_llm_model, contents=[system_role, extract_matching_content], function_name="make_report")
+            references_text += f"### {file_name}\n{file_content}\n"
+
     base_user_content = (
-        f"## Instructions\nRespond to the request in the requester's language based on the supporting materials provided.\n"
-        f"## Request\n{request_text}\n"
+        f"## Instructions\n"
+        f"Respond to the request in the requester's language based on the supporting materials provided.\n"
+        f"## Request\n"
+        f"{request_text}\n"
     )
-    
     if user_intent:
         base_user_content += f"## User Intent\n{user_intent}\n## Supporting Materials\n{references_text}"
-        return call_openai_api(llm_model, system_role, base_user_content, function_name="make_report")
+        return call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
     else:
         base_user_content += f"## Supporting Materials\n{references_text}"
-        first_response = call_openai_api(llm_model, system_role, base_user_content, function_name="make_report")
+        first_response = call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
         
         if first_response:
             proofread_user_content = (
-                f"{base_user_content}"
-                f"\n{first_response}\n"
-                "Please proofread for any issues. Write only the revised text.\n"
-                "# output\nRevised text"
+                f"## Instruction\n"
+                f"Please proofread the text while paying attention to the following points. Provide only the corrected text.\n"
+                f"- Are there any mistakes in numbers, names, or words?\n"
+                f"- Are there any errors in translation?\n"
+                f"- Does it align with the intended purpose?\n"
+                f"- Is the format appropriate?\n"
+                f"- Are there any omissions or missing elements?\n"
+                f"## output\nRevised text\n"
             )
-            return call_openai_api(llm_model, system_role, proofread_user_content, function_name="make_report")
+            return call_openai_api(llm_model, contents=[system_role, base_user_content, first_response, proofread_user_content], function_name="make_report")
         return None
 
 def extract_user_intent(request_text):
@@ -289,7 +312,7 @@ def extract_user_intent(request_text):
         f"Please interpret the following user request and clarify the user's intent. "
         f"It is okay to make educated guesses.\n## User Request\n{request_text}"
     )
-    return call_openai_api(support_llm_model, system_role, user_content, function_name="extract_user_intent")
+    return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="extract_user_intent")
 
 def generate_search_keywords(prompt):
     # Generate search keywords using OpenAI for vector database query.
@@ -297,7 +320,7 @@ def generate_search_keywords(prompt):
         f"Generate suitable search keywords for querying a vector database to accomplish the following request. "
         f"Separate multiple keywords with commas.\n---\n{prompt}"
     )
-    return call_openai_api(support_llm_model, system_role, user_content, function_name="generate_search_keywords")
+    return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="generate_search_keywords")
 
 if __name__ == '__main__':
     # Ensure the upload directory exists
