@@ -19,7 +19,7 @@ ENV WEAVIATE_SERVER=http://weaviate:8080
 ## Public port number of CognifyVault
 ENV COGNIFY_VAULT_PORT=5000
 ## Storage destination for knowledge in WEAVIATE
-ENV ARTICLE_NAME=Article
+ENV ARTICLE_NAME=ArticleV2
 ## OpenAI API key
 ENV OPENAI_API_KEY=
 ## LLM model for handling critical tasks

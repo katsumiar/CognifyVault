@@ -7,6 +7,9 @@
 
 Register knowledge and files in a vector database, and generate information based on questions using the OpenAI API. This knowledge management and search support tool efficiently searches for relevant knowledge through vector search powered by Weaviate.
 
+# **Note:**
+Due to a change in the format of the data being saved, existing data will no longer be usable.
+
 # Functionality Improvements
 - **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
 - **Duplicate Title Check**: Before saving a new title, the system checks for any existing titles with the same name and prompts the user to confirm if a duplicate is found.
@@ -14,6 +17,7 @@ Register knowledge and files in a vector database, and generate information base
 - **Improved PDF Text Extraction**: Enhanced the accuracy of text extraction from PDF files by removing unnecessary line breaks and spaces.
 - **Enhanced AI Prompts**: Optimized the interaction with OpenAI API, leading to more accurate and relevant responses based on user queries.
 - **Optimized Reference Handling**: Improved the consistency and accuracy of search results by preventing the referencing of duplicate files.
+- **Incorporation of Dates in Vector Search**: The functionality to incorporate dates into vector search has been added, allowing the AI to reference materials filtered by date according to user instructions.
 
 ## Features
 - **Knowledge Registration**: Register knowledge by directly entering text or uploading files (supports `.txt`, `.pdf`, and `.md` formats).

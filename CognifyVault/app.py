@@ -10,6 +10,9 @@ import secrets
 import difflib
 from datetime import datetime
 from flask import request
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timezone
 
 weaviate_server = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
 target_class_name = os.getenv("ARTICLE_NAME", "Article")
@@ -56,6 +59,10 @@ def create_weaviate_class():
             {
                 "name": "file_path",
                 "dataType": ["string"],
+            },
+            {
+                "name": "date",
+                "dataType": ["date"],
             }
         ]
     }
@@ -149,10 +156,15 @@ def save_text():
         except Exception as e:
             flash(f"Error occurred while saving the file: {e}", "error")
     
+    # Get the current time in RFC3339 format
+    current_time = datetime.now(timezone.utc).isoformat()
+
+    # Add date information to the data object
     data_object = {
         "title": title,
-        "content": content,
-        "file_path": file_path
+        "content": f"{content}\n\nUpdated on Local Time: {current_time}",
+        "file_path": file_path,
+        "date": current_time
     }
     
     try:
@@ -275,6 +287,12 @@ def compare_similar_files():
         if os.path.exists(upload_file_path):
             os.remove(upload_file_path)
 
+def to_rfc3339(date_str, end_of_day=False):
+    if end_of_day:
+        return f"{date_str}T23:59:59Z"
+    else:
+        return f"{date_str}T00:00:00Z"
+
 @app.route('/search', methods=['POST'])
 def search():
     # Handle search requests and display relevant articles.
@@ -291,18 +309,51 @@ def search():
         flash("Failed to generate search keywords.", "error")
         return redirect(url_for('index'))
 
-    keywords = [keyword.strip() for keyword in search_keywords.split(',')]
-    
+    keywords = search_keywords.keywords
+    objectives = search_keywords.objectives
+    dates = search_keywords.dates
+
     try:
-        result = (
+        # Initial query with keywords
+        query = (
             client.query
-            .get(target_class_name, ["title", "content", "file_path"])
+            .get(target_class_name, ["title", "content", "file_path", "date"])
             .with_near_text({
-                "concepts": keywords,
-                "distance": 0.2 # The closer the value is to 0, the better it matches the keywords.
+                "concepts": keywords + objectives,
+                "distance": 0.2  # The closer the value is to 0, the better it matches the keywords and objectives.
             })
-            .do()
         )
+
+        # Add a date filter if dates are provided
+        if dates:
+            if len(dates) == 1:
+                rfc3339_start_date = to_rfc3339(dates[0])
+                rfc3339_end_date = to_rfc3339(dates[0], end_of_day=True)
+                query = query.with_where({
+                    "path": ["date"],
+                    "operator": "GreaterThanEqual",
+                    "valueDate": rfc3339_start_date
+                }).with_where({
+                    "path": ["date"],
+                    "operator": "LessThanEqual",
+                    "valueDate": rfc3339_end_date
+                })
+            elif len(dates) == 2:
+                rfc3339_start_date = to_rfc3339(dates[0])
+                rfc3339_end_date = to_rfc3339(dates[1], end_of_day=True)
+                query = query.with_where({
+                    "path": ["date"],
+                    "operator": "GreaterThanEqual",
+                    "valueDate": rfc3339_start_date
+                }).with_where({
+                    "path": ["date"],
+                    "operator": "LessThanEqual",
+                    "valueDate": rfc3339_end_date
+                })
+            else:
+                pass
+
+        result = query.do()
 
         articles = result.get('data', {}).get('Get', {}).get(target_class_name, [])
 
@@ -315,7 +366,7 @@ def search():
                 continue
 
             file_content = read_file_content(file_path)
-            file_size = os.path.getsize(file_path) # Substitute because file name comparison is not possible
+            file_size = os.path.getsize(file_path)  # Substitute because file name comparison is not possible
 
             unique_file_identifier = f"{file_size}_{hash(file_content)}"
             if unique_file_identifier in referenced_files:
@@ -490,17 +541,31 @@ def extract_user_intent(request_text):
     )
     return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="extract_user_intent")
 
+class SearchKeywords(BaseModel):
+    objectives: list[str]
+    keywords: list[str]
+    dates: Optional[list[str]]
+
 def generate_search_keywords(prompt):
-    # Generate search keywords using OpenAI for vector database query.
+    print("generate_search_keywords")
     user_content = (
         f"## Instruction\n"
-        f"Generate appropriate objectives and search keywords for querying a vector database to find materials that would be helpful for the user's request.\n"
+        f"Generate appropriate objectives and search keywords to query the Vector database and find materials that meet your requirements, including date ranges if necessary.\n"
         f"## User request\n"
         f"{prompt}\n"
         f"## output\n"
-        f"List your objectives and keywords, separated by commas.\n"
+        f"List your objectives, keywords, and any relevant dates (if applicable), separated by commas.\n"
     )
-    return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="generate_search_keywords")
+
+    response = openai_client.beta.chat.completions.parse(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": get_system_role()},
+            {"role": "user", "content": user_content},
+        ],
+        response_format=SearchKeywords,
+    )
+    return response.choices[0].message.parsed
 
 if __name__ == '__main__':
     # Ensure the upload directory exists
