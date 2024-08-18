@@ -352,10 +352,10 @@
         });
 
         document.querySelector('form[action="{{ url_for("save_text") }}"]').addEventListener('submit', function(event) {
-            event.preventDefault();  // まずはデフォルトのフォーム送信を防ぐ
+            event.preventDefault();
 
             const title = document.querySelector('input[name="title"]').value;
-            const form = event.target;  // フォーム要素を取得
+            const form = event.target;
 
             fetch(`/check_title?title=${encodeURIComponent(title)}`)
             .then(response => response.json())
