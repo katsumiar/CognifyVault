@@ -7,10 +7,10 @@
 
 Register knowledge and files in a vector database, and generate information based on questions using the OpenAI API. This knowledge management and search support tool efficiently searches for relevant knowledge through vector search powered by Weaviate.
 
-# **Note:**
+## **Note:**
 Due to a change in the format of the data being saved, existing data will no longer be usable.
 
-# Functionality Improvements
+## Functionality Improvements
 - **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
 - **Duplicate Title Check**: Before saving a new title, the system checks for any existing titles with the same name and prompts the user to confirm if a duplicate is found.
 - **Duplicate File Check**: When uploading a file, the system checks if the content matches an existing file and warns the user of the duplication before proceeding.
