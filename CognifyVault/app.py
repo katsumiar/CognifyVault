@@ -2,10 +2,12 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 import weaviate
 from openai import OpenAI
 import os
+import re
 import pdfplumber
 import tempfile
 import markdown
 import secrets
+import difflib
 from datetime import datetime
 
 weaviate_server = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
@@ -173,6 +175,64 @@ def download_file():
         flash("No file path specified.", "error")
         return redirect(url_for('index'))
 
+@app.route('/check_title')
+def check_title():
+    title = request.args.get('title')
+    existing_titles = client.query.get(target_class_name, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(target_class_name, [])
+    for article in existing_titles:
+        if article['title'] == title:
+            return {'exists': True}, 200
+    
+    return {'exists': False}, 200
+
+@app.route('/compare_similar_files', methods=['POST'])
+def compare_similar_files():
+    file = request.files.get('file')  # Retrieve the uploaded file
+
+    if not file:
+        return {'exists': False, 'message': 'No file uploaded or file not correctly received'}, 200
+
+    temp_dir = tempfile.gettempdir()
+    upload_file_path = os.path.join(temp_dir, file.filename)
+
+    try:
+        # Save file to temporary directory
+        file.save(upload_file_path)
+                    
+        # Read the content of the uploaded file
+        uploaded_file_content = read_file_content(upload_file_path)
+
+        existing_titles = client.query.get(target_class_name, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(target_class_name, [])
+
+        matching_file_count = 0
+        comparison_info = ""
+        for article in existing_titles:
+            if article['title'] == file.filename:
+                existing_file_path = article.get('file_path')
+                if existing_file_path:
+                    matching_file_count = matching_file_count + 1
+
+                    existing_file_content = read_file_content(existing_file_path)
+                    
+                    # Compare the file contents and get the result
+                    comparison_text = compare_file(os.path.getsize(existing_file_path), os.path.getsize(upload_file_path), existing_file_content, uploaded_file_content)
+                    comparison_info += f"--- Compare Files No.{matching_file_count}\n{comparison_text}\n"
+
+        if matching_file_count > 0:
+            comparison_result = compare_files_with_llm(matching_file_count, comparison_info)
+    
+            # Construct a detailed message
+            message = f"{file.filename} file already exists:\n" \
+                    f"{comparison_result}\n" \
+                    f"Would you like to prepare for the upload (summary)?"
+            return {'exists': True, 'message': message}, 200
+
+        return {'exists': False}, 200
+    finally:
+        # Ensure the temporary file is deleted
+        if os.path.exists(upload_file_path):
+            os.remove(upload_file_path)
+
 @app.route('/search', methods=['POST'])
 def search():
     # Handle search requests and display relevant articles.
@@ -204,15 +264,33 @@ def search():
 
         articles = result.get('data', {}).get('Get', {}).get(target_class_name, [])
 
-        if not articles:
+        referenced_files = set()
+        filtered_articles = []
+
+        for article in articles:
+            file_path = article.get('file_path')
+            if not file_path:
+                continue
+
+            file_content = read_file_content(file_path)
+            file_size = os.path.getsize(file_path) # Substitute because file name comparison is not possible
+
+            unique_file_identifier = f"{file_size}_{hash(file_content)}"
+            if unique_file_identifier in referenced_files:
+                continue
+
+            referenced_files.add(unique_file_identifier)
+            filtered_articles.append(article)
+
+        if not filtered_articles:
             flash("No search results found.", "info")
             return redirect(url_for('index'))
 
         # Generate a report using the search prompt and references text
-        report_markdown = make_report(prompt, articles)
+        report_markdown = make_report(prompt, filtered_articles)
         report_html = markdown.markdown(report_markdown, extensions=['nl2br'])  # Convert Markdown to HTML
 
-        return render_template('index.html', articles=articles, report=report_html)
+        return render_template('index.html', articles=filtered_articles, report=report_html)
     except Exception as e:
         flash(f"Error occurred during search: {e}", "error")
         return redirect(url_for('index'))
@@ -233,6 +311,8 @@ def read_file_content(file_path):
                 text = ''
                 for page in pdf.pages:
                     text += page.extract_text()
+                text = text.replace('-\n', '')
+                text = re.sub(r'\s+', ' ', text)
                 return text
         else:
             raise ValueError("Unsupported file format.")
@@ -260,34 +340,72 @@ def call_openai_api(model, contents=None, function_name="Unknown Function"):
         print(f"Error occurred during OpenAI API call in {function_name}: {e}")
         return None
 
+def compare_texts(text1, text2):
+    diff = list(difflib.ndiff(text1.splitlines(), text2.splitlines()))
+    diff_info = "\n".join(diff)
+    return diff_info
+
+def compare_file(existing_size, uploaded_size, existing_content, uploaded_content):
+    diff_info = compare_texts(existing_content, uploaded_content)
+    diff_size = abs(existing_size - uploaded_size)
+    comparison_test = (
+        f"Existing file size: {existing_size} bytes\n"
+        f"Uploaded file size: {uploaded_size} bytes\n"
+        f"Difference in file size: {diff_size} bytes\n"
+        f"Difference information:\n"
+        f"{diff_info}\n"
+    )
+    return comparison_test
+
+def compare_files_with_llm(matching_file_count, comparison_test):
+    try:
+        # Request the LLM to compare the files
+        comparison_prompt = (
+            "The user attempted to upload a file, but the system detected that a file with the same name is already registered."
+            "The user needs to consider whether it is appropriate to register the same file again."
+            "Based on the comparison information between the existing file and the file to be uploaded, please explain the differences between the existing file and the file to be uploaded.\n"
+            "Note: This system allows multiple files with the same name to be registered (summaries can be set individually for each file), but if the same summary is registered, it may not be meaningful."
+            "### Comparison Results Between the Existing File and the File to Be Uploaded\n"
+            f"Number of existing files with the same name: {matching_file_count}\n"
+            f"#### Differences in Content:\n"
+            f"{comparison_test}\n"
+            "### output\n"
+            "(Mention that a file with the same name is already registered.)"
+            "(Simply state whether there are differences or not without mentioning minor differences.)\n"
+        )
+        return call_openai_api(model=support_llm_model, contents=[system_role, comparison_prompt], function_name="compare_files_with_llm")
+    except Exception as e:
+        return f"Error: An issue occurred while comparing the files: {str(e)}"
+
 def summarize_text(text):
     # Generate a summary of the provided text using OpenAI.
     user_content = (
-        f"# Instructions\nPlease extract the following information from the document below:\n"
+        f"## Instructions\nPlease extract the following information from the document below:\n"
         f"- Keywords that serve as an index for the document\n"
         f"- Summarize each chapter, organizing the content into appropriate sections\n"
-        f"# Document\n{text}"
+        f"## Document\n{text}"
     )
     return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="summarize_text")
 
 def make_report(request_text, articles):
-    # Generate a report based on user request and supplementary materials using OpenAI.
-    references_text = ""
+    report_contents = []
+
     for article in articles:
         file_path = article.get('file_path')
-        if file_path:
-            file_name = os.path.basename(file_path)
-            file_content = read_file_content(file_path)
-            extract_matching_content = (
-                f"## Instruction\n"
-                f"Please extract the relevant parts from the Supporting Materials that are useful for the user's request while maintaining consistency.\n"
-                f"## User's Request\n"
-                f"{request_text}\n"
-                f"## Supporting Materials\n"
-                f"{file_content}\n"
-            )
-            file_content = call_openai_api(support_llm_model, contents=[system_role, extract_matching_content], function_name="make_report")
-            references_text += f"### file:{file_name}\n{file_content}\n"
+        if not file_path:
+            continue
+
+        file_content = read_file_content(file_path)
+        extract_matching_content = (
+            f"## Instruction\n"
+            f"Please extract the relevant parts from the Supporting Materials that are useful for the user's request while maintaining consistency.\n"
+            f"## User's Request\n"
+            f"{request_text}\n"
+            f"## Supporting Materials\n"
+            f"{file_content}\n"
+        )
+        file_summary = call_openai_api(support_llm_model, contents=[system_role, extract_matching_content], function_name="make_report")
+        report_contents.append(f"### file:{os.path.basename(file_path)}\n{file_summary}\n")
 
     base_user_content = (
         f"## Instructions\n"
@@ -295,28 +413,29 @@ def make_report(request_text, articles):
         f"## Request\n"
         f"{request_text}\n"
     )
-    user_intent = extract_user_intent(request_text)
-    if user_intent:
-        base_user_content += f"## User Intent\n{user_intent}\n## Supporting Materials\n{references_text}"
-        return call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
+
+    if report_contents:
+        base_user_content += "## Supporting Materials\n" + "\n".join(report_contents)
     else:
-        base_user_content += f"## Supporting Materials\n{references_text}"
-        first_response = call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
-        
-        if first_response:
-            proofread_user_content = (
-                f"## Instruction\n"
-                f"Please proofread the text while paying attention to the following points. Provide only the corrected text.\n"
-                f"- Are there any mistakes in numbers, names, or words?\n"
-                f"- Are there any errors in translation?\n"
-                f"- Does it align with the intended purpose?\n"
-                f"- Is the format appropriate?\n"
-                f"- Are there any omissions or missing elements?\n"
-                f"## output\n"
-                f"Revised text\n"
-            )
-            return call_openai_api(llm_model, contents=[system_role, base_user_content, first_response, proofread_user_content], function_name="make_report")
-        return None
+        base_user_content += "## Supporting Materials\nNo relevant files were found."
+
+    first_response = call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
+
+    if first_response:
+        proofread_user_content = (
+            f"## Instruction\n"
+            f"Please proofread the text while paying attention to the following points. Provide only the corrected text.\n"
+            f"- Are there any mistakes in numbers, names, or words?\n"
+            f"- Are there any errors in translation?\n"
+            f"- Does it align with the intended purpose?\n"
+            f"- Is the format appropriate?\n"
+            f"- Are there any omissions or missing elements?\n"
+            f"## output\n"
+            f"Revised text\n"
+        )
+        return call_openai_api(llm_model, contents=[system_role, base_user_content, first_response, proofread_user_content], function_name="make_report")
+
+    return None
 
 def extract_user_intent(request_text):
     # Interprets the text to clarify what the user intends.

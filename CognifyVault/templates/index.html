@@ -123,6 +123,10 @@
             margin: 0;
             font-size: 28px;
         }
+        .error-input {
+            border-color: red;
+            background-color: #f8d7da;
+        }
     </style>
 </head>
 <body>
@@ -245,9 +249,6 @@
                 fileNameDisplay.textContent = fileInput.files[0].name;
                 const file = fileInput.files[0];
                 if (file) {
-                    // Set the file name as the title
-                    document.querySelector('input[name="title"]').value = file.name;
-
                     if (file.type === 'text/plain' || file.type === 'application/pdf' || file.name.endsWith('.md')) {
                         // Disable form and show loading indicator
                         document.querySelector('.container').classList.add('disabled');
@@ -257,27 +258,30 @@
                         const formData = new FormData();
                         formData.append('file', file);
 
-                        fetch('/summarize_upload_file', {  // Reuse the same endpoint for summarization
+                        fetch('/compare_similar_files', {
                             method: 'POST',
                             body: formData
                         })
                         .then(response => response.json())
                         .then(data => {
-                            if (data.summary) {
-                                document.querySelector('textarea[name="content"]').value = data.summary;
-                            } else {
-                                console.error('Summary field is missing in the response:', data);
-                                document.querySelector('textarea[name="content"]').value = 'Error: Summary could not be generated.';
+                            if (data.exists) {
+                                isUpload = false
+                                const confirmSave = confirm(data.message);
+                                if (confirmSave) {
+                                    upload_file(file.name, formData);
+                                }
+                                else
+                                {
+                                    hideLoadingIndicator();
+                                }
+                            }
+                            else {
+                                upload_file(file.name, formData);
                             }
                         })
                         .catch(error => {
-                            console.error('Error occurred while summarizing the file:', error);
-                            document.querySelector('textarea[name="content"]').value = 'Error occurred while summarizing the file.';
-                        })
-                        .finally(() => {
-                            // Enable form and hide loading indicator
-                            document.querySelector('.container').classList.remove('disabled');
-                            document.getElementById('loadingIndicator').style.display = 'none';
+                            console.error('Error checking title:', error);
+                            isUpload = false
                         });
                     } else {
                         document.querySelector('textarea[name="content"]').value = 'Unsupported file format.';
@@ -286,6 +290,91 @@
             } else {
                 fileNameDisplay.textContent = '';
             }
+        }
+
+        function upload_file(filename, formData) {
+            // Set the file name as the title
+            document.querySelector('input[name="title"]').value = filename;
+
+            fetch('/summarize_upload_file', {  // Reuse the same endpoint for summarization
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.summary) {
+                    document.querySelector('textarea[name="content"]').value = data.summary;
+                } else {
+                    console.error('Summary field is missing in the response:', data);
+                    document.querySelector('textarea[name="content"]').value = 'Error: Summary could not be generated.';
+                }
+            })
+            .catch(error => {
+                console.error('Error occurred while summarizing the file:', error);
+                document.querySelector('textarea[name="content"]').value = 'Error occurred while summarizing the file.';
+            })
+            .finally(() => {
+                // Enable form and hide loading indicator
+                hideLoadingIndicator()
+            });
+        }
+
+        document.querySelector('input[name="title"]').addEventListener('input', function() {
+            const titleInput = this;
+            const title = titleInput.value;
+
+            if (title.length > 0) {
+                fetch(`/check_title?title=${encodeURIComponent(title)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        titleInput.classList.add('error-input');
+                    } else {
+                        titleInput.classList.remove('error-input');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking title:', error);
+                });
+            }
+        });
+
+        document.querySelector('form[action="{{ url_for("save_text") }}"]').addEventListener('submit', function(event) {
+            event.preventDefault();  // まずはデフォルトのフォーム送信を防ぐ
+
+            const title = document.querySelector('input[name="title"]').value;
+            const form = event.target;  // フォーム要素を取得
+
+            fetch(`/check_title?title=${encodeURIComponent(title)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.exists) {
+                    const confirmUpdate = confirm("A title with the same name already exists. Would you like to save it anyway?");
+                    if (confirmUpdate) {
+                        form.submit();
+                        showLoadingIndicator();
+                    } else {
+                        hideLoadingIndicator();
+                    }
+                } else {
+                    form.submit();
+                    showLoadingIndicator();
+                }
+            })
+            .catch(error => {
+                console.error('Error checking title:', error);
+                hideLoadingIndicator();
+            });
+        });
+
+        function hideLoadingIndicator() {
+            document.querySelector('.container').classList.remove('disabled');
+            document.getElementById('loadingIndicator').style.display = 'none';
+        }
+
+        function showLoadingIndicator() {
+            document.querySelector('.container').classList.add('disabled');
+            document.getElementById('loadingIndicator').style.display = 'flex';
         }
     </script>
 </body>
