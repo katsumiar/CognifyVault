@@ -549,10 +549,12 @@ class SearchKeywords(BaseModel):
 def generate_search_keywords(prompt):
     user_content = (
         f"## Instruction\n"
-        f"Generate appropriate objectives and search keywords to query the Vector database and find materials that meet your requirements, including date ranges if necessary.\n"
+        f"To fulfill the user request, query the Vector database. Generate an appropriate purpose and search keywords (including a date range if necessary).\n"
+        f"Consider the date range as follows: `recent` implies about 3 days, and `latest` implies about 1 month.\n"
+        f"After searching with the purpose and keywords, refine the search by date range, if specified. Therefore, if you specify a date range, there is no need to include date elements in the purpose and keywords.\n"
         f"## User request\n"
         f"{prompt}\n"
-        f"## output\n"
+        f"## Output\n"
         f"List your objectives, keywords, and any relevant dates (if applicable), separated by commas.\n"
     )
 
