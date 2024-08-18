@@ -7,31 +7,46 @@
 
 Register knowledge and files in a vector database, and generate information based on questions using the OpenAI API. This knowledge management and search support tool efficiently searches for relevant knowledge through vector search powered by Weaviate.
 
+# Functionality Improvements
+- **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
+- **Duplicate Title Check**: Before saving a new title, the system checks for any existing titles with the same name and prompts the user to confirm if a duplicate is found.
+- **Duplicate File Check**: When uploading a file, the system checks if the content matches an existing file and warns the user of the duplication before proceeding.
+- **Improved PDF Text Extraction**: Enhanced the accuracy of text extraction from PDF files by removing unnecessary line breaks and spaces.
+- **Enhanced AI Prompts**: Optimized the interaction with OpenAI API, leading to more accurate and relevant responses based on user queries.
+- **Optimized Reference Handling**: Improved the consistency and accuracy of search results by preventing the referencing of duplicate files.
+
 ## Features
-- **Knowledge Registration**: Register knowledge by directly entering text or uploading files (supports `.txt` and `.pdf` formats).
+- **Knowledge Registration**: Register knowledge by directly entering text or uploading files (supports `.txt`, `.pdf`, and `.md` formats).
+  - **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
+  - **Duplicate Title Check**: Before saving a new title, the system checks for any existing titles with the same name and prompts the user to confirm if a duplicate is found.
 - **Knowledge Extraction**: Ask questions and get responses based on the registered knowledge.
+  - **Enhanced AI Prompts**: Optimized the interaction with OpenAI API, leading to more accurate and relevant responses based on user queries.
 - **File Summarization**: Automatically generate summaries for uploaded files using the OpenAI API.
-- **Vector Search**: Efficiently search through knowledge using Weaviate's vector-based search capabilities.
+  - **Duplicate File Check**: When uploading a file, the system checks if the content matches an existing file and warns the user of the duplication before proceeding.
+  - **Improved PDF Text Extraction**: Enhanced the accuracy of text extraction from PDF files by removing unnecessary line breaks and spaces.
+- **Vector Search**: Efficiently search through registered knowledge using vector search powered by Weaviate.
+  - **Optimized Reference Handling**: Improved the consistency and accuracy of search results by preventing the referencing of duplicate files.
 
 ## Report Generation Feature
 
 This application offers an advanced report generation feature that creates detailed reports based on user requests. Unlike simple text generation, this feature intelligently analyzes the provided documents and articles to produce reports that align closely with the user's intent.
 
-### 1. Information Extraction Using Vector Search
+- 1. Information Extraction Using Vector Search
 First, the application automatically extracts relevant information from the provided materials (such as articles or documents). This process utilizes vector search technology, which considers the semantic relationships between words and phrases, ensuring that the most relevant content is selected in response to the user's request.
 
-### 2. Understanding and Reflecting User Intent
+- 2. Understanding and Reflecting User Intent
 Next, the application interprets the user's request to understand their intent. This step goes beyond surface-level processing and delves into what the user is truly asking for, ensuring that the report is constructed in a way that accurately reflects the user's needs.
 
-### 3. Report Generation and Proofreading
+- 3. Report Generation and Proofreading
 Based on the extracted information and the interpreted user intent, the application generates a report. The generated report is then further proofread to verify the accuracy of numbers, names, translation quality, and the appropriateness of the format. This process ensures that the final document is of high quality.
 
-### 4. Accuracy and Cost
+- 4. Accuracy and Cost
 This approach involves multiple invocations of large language models (LLMs), which increases processing costs. However, the precision and quality of the resulting reports are significantly enhanced, meeting the user's expectations. While the cost is higher, the end result is a highly reliable document.
 
 ## Supported File Formats
 - **Text Files (`.txt`)**
 - **PDF Files (`.pdf`)**
+- **Markdown Files (`.md`)**
 
 ## Prerequisites
 - Docker
