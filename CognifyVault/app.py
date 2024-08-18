@@ -353,7 +353,7 @@ def search():
             else:
                 pass
 
-        result = query.do()
+        result = query.with_limit(3).do()
 
         articles = result.get('data', {}).get('Get', {}).get(target_class_name, [])
 
@@ -547,7 +547,6 @@ class SearchKeywords(BaseModel):
     dates: Optional[list[str]]
 
 def generate_search_keywords(prompt):
-    print("generate_search_keywords")
     user_content = (
         f"## Instruction\n"
         f"Generate appropriate objectives and search keywords to query the Vector database and find materials that meet your requirements, including date ranges if necessary.\n"
