@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, abort, session
 import weaviate
 from openai import OpenAI
 import os
@@ -9,12 +9,21 @@ import markdown
 import secrets
 import difflib
 from datetime import datetime
+from flask import request
 
 weaviate_server = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
 target_class_name = os.getenv("ARTICLE_NAME", "Article")
 llm_model = os.getenv("LLM_MODEL", "gpt-4o-mini")
 support_llm_model = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
-system_role = "You are an assistant that manages documents."
+
+LANGUAGES = {
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'ja': 'Japanese',
+    'zh': 'Chinese',
+}
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
@@ -58,10 +67,43 @@ def create_weaviate_class():
     else:
         print(f"Class '{target_class_name}' already exists.")
 
+def get_default_language():
+    supported_languages = ['en', 'es', 'fr', 'de', 'ja', 'zh']
+
+    accept_language = request.headers.get('Accept-Language')
+
+    if accept_language:
+        languages = [lang.split(';')[0] for lang in accept_language.split(',')]
+        
+        for lang in languages:
+            lang_prefix = lang.split('-')[0]
+            if lang_prefix in supported_languages:
+                return lang_prefix
+    
+    return 'en'
+
+@app.before_request
+def set_language():
+    if 'language' not in session:
+        session['language'] = get_default_language()
+
+@app.route('/set_language', methods=['POST'])
+def set_language():
+    language = request.form['language']
+    if language in LANGUAGES:
+        session['language'] = language
+    return redirect(url_for('index'))
+
+def get_system_role():
+    language = session.get('language', 'en')
+    system_role = f"You are an assistant that manages documents and communicates in {LANGUAGES[language]}."
+    return system_role
+
 @app.route('/')
 def index():
     # Render the main index page.
-    return render_template('index.html')
+    system_role = get_system_role()
+    return render_template('index.html', system_role=system_role)
 
 @app.route('/save_text', methods=['POST'])
 def save_text():
@@ -373,7 +415,7 @@ def compare_files_with_llm(matching_file_count, comparison_test):
             "(Mention that a file with the same name is already registered.)"
             "(Simply state whether there are differences or not without mentioning minor differences.)\n"
         )
-        return call_openai_api(model=support_llm_model, contents=[system_role, comparison_prompt], function_name="compare_files_with_llm")
+        return call_openai_api(model=support_llm_model, contents=[get_system_role(), comparison_prompt], function_name="compare_files_with_llm")
     except Exception as e:
         return f"Error: An issue occurred while comparing the files: {str(e)}"
 
@@ -385,7 +427,7 @@ def summarize_text(text):
         f"- Summarize each chapter, organizing the content into appropriate sections\n"
         f"## Document\n{text}"
     )
-    return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="summarize_text")
+    return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="summarize_text")
 
 def make_report(request_text, articles):
     report_contents = []
@@ -404,7 +446,7 @@ def make_report(request_text, articles):
             f"## Supporting Materials\n"
             f"{file_content}\n"
         )
-        file_summary = call_openai_api(support_llm_model, contents=[system_role, extract_matching_content], function_name="make_report")
+        file_summary = call_openai_api(support_llm_model, contents=[get_system_role(), extract_matching_content], function_name="make_report")
         report_contents.append(f"### file:{os.path.basename(file_path)}\n{file_summary}\n")
 
     base_user_content = (
@@ -419,7 +461,7 @@ def make_report(request_text, articles):
     else:
         base_user_content += "## Supporting Materials\nNo relevant files were found."
 
-    first_response = call_openai_api(llm_model, contents=[system_role, base_user_content], function_name="make_report")
+    first_response = call_openai_api(llm_model, contents=[get_system_role(), base_user_content], function_name="make_report")
 
     if first_response:
         proofread_user_content = (
@@ -433,7 +475,7 @@ def make_report(request_text, articles):
             f"## output\n"
             f"Revised text\n"
         )
-        return call_openai_api(llm_model, contents=[system_role, base_user_content, first_response, proofread_user_content], function_name="make_report")
+        return call_openai_api(llm_model, contents=[get_system_role(), base_user_content, first_response, proofread_user_content], function_name="make_report")
 
     return None
 
@@ -446,7 +488,7 @@ def extract_user_intent(request_text):
         f"## User Request\n"
         f"{request_text}\n"
     )
-    return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="extract_user_intent")
+    return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="extract_user_intent")
 
 def generate_search_keywords(prompt):
     # Generate search keywords using OpenAI for vector database query.
@@ -458,7 +500,7 @@ def generate_search_keywords(prompt):
         f"## output\n"
         f"List your objectives and keywords, separated by commas.\n"
     )
-    return call_openai_api(support_llm_model, contents=[system_role, user_content], function_name="generate_search_keywords")
+    return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="generate_search_keywords")
 
 if __name__ == '__main__':
     # Ensure the upload directory exists

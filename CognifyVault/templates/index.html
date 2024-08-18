@@ -139,6 +139,18 @@
         <div class="form-container">
             <h1 class="title-with-icon">CognifyVault</h1>
 
+            <form action="{{ url_for('set_language') }}" method="post">
+                <label for="language-select">Choose your language:</label>
+                <select name="language" id="language-select" onchange="this.form.submit()">
+                    <option value="en" {% if session['language'] == 'en' %}selected{% endif %}>English</option>
+                    <option value="es" {% if session['language'] == 'es' %}selected{% endif %}>Spanish</option>
+                    <option value="fr" {% if session['language'] == 'fr' %}selected{% endif %}>French</option>
+                    <option value="de" {% if session['language'] == 'de' %}selected{% endif %}>German</option>
+                    <option value="ja" {% if session['language'] == 'ja' %}selected{% endif %}>Japanese</option>
+                    <option value="zh" {% if session['language'] == 'zh' %}selected{% endif %}>Chinese</option>
+                </select>
+            </form>
+            
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     <ul>

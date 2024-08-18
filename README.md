@@ -43,6 +43,27 @@ Based on the extracted information and the interpreted user intent, the applicat
 - 4. Accuracy and Cost
 This approach involves multiple invocations of large language models (LLMs), which increases processing costs. However, the precision and quality of the resulting reports are significantly enhanced, meeting the user's expectations. While the cost is higher, the end result is a highly reliable document.
 
+## Language Switching
+
+The application supports multiple languages to enhance user experience. By default, the application will detect and select the language based on your browser's locale settings. However, you can manually switch to a different language using the following steps:
+
+1. **Access the Language Dropdown**: On the main page, locate the language selection dropdown at the top of the page.
+2. **Select Your Preferred Language**: Click on the dropdown menu and choose your preferred language from the list of available options.
+3. **Automatic Refresh**: After selecting a language, the page will automatically refresh to apply the language change.
+4. **Persistence**: The language setting will be saved for your session, so it will remain in your selected language as long as the session is active.
+
+### Supported Languages
+
+The application currently supports the following languages:
+- English (`en`)
+- Spanish (`es`)
+- French (`fr`)
+- German (`de`)
+- Japanese (`ja`)
+- Chinese (`zh`)
+
+If your preferred language is not listed, the default language is English (`en`).
+
 ## Supported File Formats
 - **Text Files (`.txt`)**
 - **PDF Files (`.pdf`)**
