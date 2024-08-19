@@ -163,8 +163,10 @@
 
             <h2>Register your knowledge</h2>
             <form action="{{ url_for('save_text') }}" method="post" enctype="multipart/form-data">
+                <label for="title-input">Title:</label>
                 <input type="text" name="title" placeholder="Enter a title" required>
-                <textarea name="content" rows="4" placeholder="Enter your knowledge" required></textarea>
+                <label for="content-textarea">Content:</label>
+                <textarea name="content" rows="5" placeholder="Enter your knowledge" required></textarea>
                 <div class="drag-drop-area" id="dragDropArea">
                     Drag and drop knowledge files
                 </div>
@@ -175,7 +177,7 @@
 
             <h2>Extract knowledge</h2>
             <form action="{{ url_for('search') }}" method="post">
-                <input type="text" name="prompt" placeholder="Enter your request" required>
+                <textarea name="prompt" rows="4" placeholder="Enter your request" required></textarea>
                 <button type="submit" class="button">Request</button>
             </form>
         </div>
@@ -208,6 +210,18 @@
         const fileInput = document.getElementById('fileInput');
         const fileNameDisplay = document.getElementById('fileName');
 
+        let supportedExtensions = [];
+
+        // サポートされている拡張子を取得
+        fetch('/supported_extensions')
+            .then(response => response.json())
+            .then(data => {
+                supportedExtensions = data.supported_extensions;
+            })
+            .catch(error => {
+                console.error('Error fetching supported extensions:', error);
+            });
+
         dragDropArea.addEventListener('click', () => fileInput.click());
         dragDropArea.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -231,11 +245,11 @@
             // フォーム送信時にファイル名の表示をリセット
             document.getElementById('fileName').textContent = '';
         });
-        
+
         document.addEventListener('DOMContentLoaded', function() {
             const textForm = document.querySelector('form[action="{{ url_for("save_text") }}"]');
             const searchForm = document.querySelector('form[action="{{ url_for("search") }}"]');
-
+            
             if (textForm) {
                 textForm.addEventListener('submit', function(event) {
                     showLoadingIndicator();
@@ -263,10 +277,11 @@
 
         function displayFileName() {
             if (fileInput.files.length > 0) {
-                fileNameDisplay.textContent = fileInput.files[0].name;
                 const file = fileInput.files[0];
                 if (file) {
-                    if (file.type === 'text/plain' || file.type === 'application/pdf' || file.name.endsWith('.md')) {
+                    const fileExtension = file.name.split('.').pop().toLowerCase();
+                    if (supportedExtensions.includes('.' + fileExtension)) {
+                        fileNameDisplay.textContent = fileInput.files[0].name;
                         // Disable form and show loading indicator
                         document.querySelector('.container').classList.add('disabled');
                         document.getElementById('loadingIndicator').style.display = 'flex';
@@ -301,6 +316,7 @@
                             isUpload = false
                         });
                     } else {
+                        fileNameDisplay.textContent = '';
                         document.querySelector('textarea[name="content"]').value = 'Unsupported file format.';
                     }
                 }

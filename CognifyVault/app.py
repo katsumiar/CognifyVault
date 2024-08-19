@@ -15,13 +15,17 @@ from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
 
-weaviate_server = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
-target_class_name = os.getenv("ARTICLE_NAME", "Article")
-llm_model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-support_llm_model = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
+WEAVIATE_SERVER = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
+TARGET_CLASS_NAME = os.getenv("ARTICLE_NAME", "Article")
 
-file_headder = "file_"
-file_analyze_headder = "analyze_"
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+SUPPORT_LLM_MODEL = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
+
+FILE_HEADER = "file_"
+FILE_ANALYZE_HEADER = "analyze_"
+
+TEXT_EXTENSIONS = {'.txt', '.md' }
+SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | {'.pdf'}
 
 LANGUAGES = {
     'en': 'English',
@@ -37,7 +41,7 @@ app.secret_key = secrets.token_hex(32)
 
 # Set up Weaviate client
 client = weaviate.Client(
-    url=weaviate_server,
+    url = WEAVIATE_SERVER,
     additional_headers={
         "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")
     },
@@ -48,7 +52,7 @@ openai_client = OpenAI() # os.getenv("OPENAI_API_KEY")
 def create_weaviate_class():
     # Create a class in Weaviate to store articles if it doesn't already exist.
     class_obj = {
-        "class": target_class_name,
+        "class": TARGET_CLASS_NAME,
         "description": "A class to store articles",
         "vectorizer": "text2vec-openai",  # Specify the embedding model
         "properties": [
@@ -72,11 +76,11 @@ def create_weaviate_class():
     }
     
     existing_classes = client.schema.get().get('classes', [])
-    if not any(c['class'] == target_class_name for c in existing_classes):
+    if not any(c['class'] == TARGET_CLASS_NAME for c in existing_classes):
         client.schema.create_class(class_obj)
-        print(f"Class '{target_class_name}' created.")
+        print(f"Class '{TARGET_CLASS_NAME}' created.")
     else:
-        print(f"Class '{target_class_name}' already exists.")
+        print(f"Class '{TARGET_CLASS_NAME}' already exists.")
 
 def get_default_language():
     supported_languages = ['en', 'es', 'fr', 'de', 'ja', 'zh']
@@ -92,6 +96,19 @@ def get_default_language():
                 return lang_prefix
     
     return 'en'
+
+def is_text_file(extension):
+    # Determines if the file extension is one of the supported text file types.
+    return extension.lower() in TEXT_EXTENSIONS
+
+def is_supported_file(extension):
+    # Determines if the file extension is one of the supported types.
+    return extension.lower() in SUPPORTED_EXTENSIONS
+
+@app.route('/supported_extensions', methods=['GET'])
+def supported_extensions():
+    # Returns a list of supported file extensions.
+    return {"supported_extensions": list(SUPPORTED_EXTENSIONS)}, 200
 
 @app.before_request
 def set_language():
@@ -124,7 +141,7 @@ def save_text():
     file = request.files.get('file')
     file_path = None
 
-    directory = os.path.join(f"uploaded_files_{target_class_name}")
+    directory = os.path.join(f"uploaded_files_{TARGET_CLASS_NAME}")
     if not os.path.exists(directory):
         os.makedirs(directory)
 
@@ -135,8 +152,13 @@ def save_text():
         
         # Add a timestamp to the filename to avoid collisions
         base_name, ext = os.path.splitext(filename)
+
+        if not is_supported_file(ext):
+            flash("Unsupported file format.", "error")
+            return redirect(url_for('index'))
+
         unique_filename = f"{base_name}_{timestamp}{ext}"
-        unique_filename_with_header = f"{file_headder}_{unique_filename}"
+        unique_filename_with_header = f"{FILE_HEADER}_{unique_filename}"
         file_path = os.path.join(directory, unique_filename_with_header)
         
         # Save the uploaded file to the directory
@@ -144,7 +166,7 @@ def save_text():
 
         if ext == ".pdf":
             file_content = read_file_content(file_path)
-            analyze_filename_with_header = f"{file_analyze_headder}_{base_name}_{timestamp}.txt"
+            analyze_filename_with_header = f"{FILE_ANALYZE_HEADER}_{base_name}_{timestamp}.txt"
             analyze_file_path = os.path.join(directory, analyze_filename_with_header)
             analyze_text = analyze_text_format(file_content)
             with open(analyze_file_path, 'w', encoding='utf-8') as f:
@@ -152,7 +174,7 @@ def save_text():
 
     else:
         # If no file is uploaded, create a .txt file with the title as the name
-        unique_filename = f"{file_headder}_{title}_{timestamp}.txt"
+        unique_filename = f"{FILE_HEADER}_{title}_{timestamp}.txt"
         file_path = os.path.join(directory, unique_filename)
         
         # Save the content as a .txt file
@@ -179,7 +201,7 @@ def save_text():
         # Store the data object in Weaviate
         client.data_object.create(
             data_object=data_object,
-            class_name=target_class_name
+            class_name=TARGET_CLASS_NAME
         )
         flash("Text and file saved successfully.", "success")
     except Exception as e:
@@ -222,7 +244,7 @@ def download_file():
     file_path = request.args.get('file_path')
     
     if file_path:
-        safe_path = os.path.join(f"uploaded_files_{target_class_name}", os.path.basename(file_path))
+        safe_path = os.path.join(f"uploaded_files_{TARGET_CLASS_NAME}", os.path.basename(file_path))
         
         if os.path.exists(safe_path):
             try:
@@ -240,7 +262,7 @@ def download_file():
 @app.route('/check_title')
 def check_title():
     title = request.args.get('title')
-    existing_titles = client.query.get(target_class_name, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(target_class_name, [])
+    existing_titles = client.query.get(TARGET_CLASS_NAME, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
     for article in existing_titles:
         if article['title'] == title:
             return {'exists': True}, 200
@@ -264,7 +286,7 @@ def compare_similar_files():
         # Read the content of the uploaded file
         uploaded_file_content = read_file_content(upload_file_path)
 
-        existing_titles = client.query.get(target_class_name, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(target_class_name, [])
+        existing_titles = client.query.get(TARGET_CLASS_NAME, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
 
         matching_file_count = 0
         comparison_info = ""
@@ -316,7 +338,7 @@ def search_articles(prompt):
         # Initial query with keywords
         query = (
             client.query
-            .get(target_class_name, ["title", "content", "file_path", "date"])
+            .get(TARGET_CLASS_NAME, ["title", "content", "file_path", "date"])
             .with_near_text({
                 "concepts": keywords + objectives,
                 "distance": 0.2  # The closer the value is to 0, the better it matches the keywords and objectives.
@@ -354,7 +376,7 @@ def search_articles(prompt):
 
         result = query.with_limit(3).do()
 
-        articles = result.get('data', {}).get('Get', {}).get(target_class_name, [])
+        articles = result.get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
 
         referenced_files = set()
         filtered_articles = []
@@ -406,14 +428,10 @@ def search():
         return redirect(url_for('index'))
 
 def read_file_content(file_path):
-    # Read the content of a file based on its extension.
     _, file_extension = os.path.splitext(file_path)
     
     try:
-        if file_extension.lower() == '.txt':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        elif file_extension.lower() == '.md':
+        if is_text_file(file_extension):
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         elif file_extension.lower() == '.pdf':
@@ -450,11 +468,11 @@ def call_openai_api(model, contents=None, function_name="Unknown Function"):
         print(f"Error occurred during OpenAI API call in {function_name}: {e}")
         return None
 
-def load_analyzed_file_content(file_path, file_headder, file_analyze_headder):
+def load_analyzed_file_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER):
     path = Path(file_path)
     
-    if path.name.startswith(file_headder):
-        new_file_name = path.name.replace(file_headder, file_analyze_headder, 1)
+    if path.name.startswith(FILE_HEADER):
+        new_file_name = path.name.replace(FILE_HEADER, FILE_ANALYZE_HEADER, 1)
         new_file_path = path.with_name(new_file_name).with_suffix('.txt')
         
         if new_file_path.exists():
@@ -500,7 +518,7 @@ def compare_files_with_llm(matching_file_count, comparison_test):
             "(Mention that a file with the same name is already registered.)"
             "(Simply state whether there are differences or not without mentioning minor differences.)\n"
         )
-        return call_openai_api(model=support_llm_model, contents=[get_system_role(), comparison_prompt], function_name="compare_files_with_llm")
+        return call_openai_api(model=SUPPORT_LLM_MODEL, contents=[get_system_role(), comparison_prompt], function_name="compare_files_with_llm")
     except Exception as e:
         return f"Error: An issue occurred while comparing the files: {str(e)}"
 
@@ -514,11 +532,11 @@ def analyze_text_format(text):
         f"## Output\n"
         f"(Analysis information only)\n"
     )
-    return call_openai_api(support_llm_model, contents=[get_system_role(), analyze_text_format_prompt], function_name="analyze_text_format")
+    return call_openai_api(SUPPORT_LLM_MODEL, contents=[get_system_role(), analyze_text_format_prompt], function_name="analyze_text_format")
 
 def summarize_text(text, file_path):
     # Generate a summary of the provided text using OpenAI.
-    analyze_text_info = load_analyzed_file_content(file_path, file_headder, file_analyze_headder)
+    analyze_text_info = load_analyzed_file_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER)
     if analyze_text_info:
         analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
     else:
@@ -538,7 +556,7 @@ def summarize_text(text, file_path):
         f"## Output\n"
         f"(Summary only)\n"
     )
-    return call_openai_api(support_llm_model, contents=[get_system_role(), summarize_text_prompt], function_name="summarize_text")
+    return call_openai_api(SUPPORT_LLM_MODEL, contents=[get_system_role(), summarize_text_prompt], function_name="summarize_text")
 
 def extract_and_organize_data(request_text, articles):
     report_contents = []
@@ -550,7 +568,7 @@ def extract_and_organize_data(request_text, articles):
 
         file_content = read_file_content(file_path)
 
-        analyze_text_info = load_analyzed_file_content(file_path, file_headder, file_analyze_headder)
+        analyze_text_info = load_analyzed_file_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER)
         if analyze_text_info:
             analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
 
@@ -563,7 +581,7 @@ def extract_and_organize_data(request_text, articles):
             f"## Support Materials\n"
             f"{file_content}\n"
         )
-        file_summary = call_openai_api(support_llm_model, contents=[get_system_role(), extract_matching_content], function_name="extract_and_organize_data")
+        file_summary = call_openai_api(SUPPORT_LLM_MODEL, contents=[get_system_role(), extract_matching_content], function_name="extract_and_organize_data")
         report_contents.append(f"### file:{os.path.basename(file_path)}\n{file_summary}\n")
 
     return report_contents
@@ -583,7 +601,7 @@ def make_report(request_text, articles):
     else:
         base_user_content += "## Supporting Materials\nNo relevant files were found."
 
-    first_response = call_openai_api(llm_model, contents=[get_system_role(), base_user_content], function_name="make_report")
+    first_response = call_openai_api(LLM_MODEL, contents=[get_system_role(), base_user_content], function_name="make_report")
     
     last_response = None
     if first_response:
@@ -596,7 +614,7 @@ def make_report(request_text, articles):
             f"- Are there any omissions or missing elements?\n"
             f"Please write only the final proofread text."
         )
-        last_response = call_openai_api(llm_model, contents=[get_system_role(), base_user_content, first_response, proofread_user_content], function_name="make_report")
+        last_response = call_openai_api(LLM_MODEL, contents=[get_system_role(), base_user_content, first_response, proofread_user_content], function_name="make_report")
 
     return last_response
 
@@ -609,7 +627,7 @@ def extract_user_intent(request_text):
         f"## User Request\n"
         f"{request_text}\n"
     )
-    return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="extract_user_intent")
+    return call_openai_api(SUPPORT_LLM_MODEL, contents=[get_system_role(), user_content], function_name="extract_user_intent")
 
 class SearchKeywords(BaseModel):
     objectives: list[str]
@@ -640,7 +658,7 @@ def generate_search_keywords(prompt):
 
 if __name__ == '__main__':
     # Ensure the upload directory exists
-    directory = os.path.join(f"uploaded_files_{target_class_name}")
+    directory = os.path.join(f"uploaded_files_{TARGET_CLASS_NAME}")
     if not os.path.exists(directory):
         os.makedirs(directory)
     create_weaviate_class()
