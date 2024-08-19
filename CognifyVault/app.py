@@ -13,11 +13,15 @@ from flask import request
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
+from pathlib import Path
 
 weaviate_server = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
 target_class_name = os.getenv("ARTICLE_NAME", "Article")
 llm_model = os.getenv("LLM_MODEL", "gpt-4o-mini")
 support_llm_model = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
+
+file_headder = "file_"
+file_analyze_headder = "analyze_"
 
 LANGUAGES = {
     'en': 'English',
@@ -103,7 +107,7 @@ def set_language():
 
 def get_system_role():
     language = session.get('language', 'en')
-    system_role = f"You are an assistant that manages documents and communicates in {LANGUAGES[language]}."
+    system_role = f"You are an assistant responsible for communication in {LANGUAGES[language]}. Your role involves managing documents and preparing materials. You have a meticulous personality, prioritizing accuracy, and you provide responses that are both careful and nuanced."
     return system_role
 
 @app.route('/')
@@ -124,35 +128,39 @@ def save_text():
     if not os.path.exists(directory):
         os.makedirs(directory)
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if file:
         # If a file is uploaded, use the original file name
         filename = file.filename
         
         # Add a timestamp to the filename to avoid collisions
         base_name, ext = os.path.splitext(filename)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_filename = f"{base_name}_{timestamp}{ext}"
-        file_path = os.path.join(directory, unique_filename)
+        unique_filename_with_header = f"{file_headder}_{unique_filename}"
+        file_path = os.path.join(directory, unique_filename_with_header)
         
         # Save the uploaded file to the directory
         file.save(file_path)
+
+        if ext == ".pdf":
+            file_content = read_file_content(file_path)
+            analyze_filename_with_header = f"{file_analyze_headder}_{base_name}_{timestamp}.txt"
+            analyze_file_path = os.path.join(directory, analyze_filename_with_header)
+            analyze_text = analyze_text_format(file_content)
+            with open(analyze_file_path, 'w', encoding='utf-8') as f:
+                f.write(analyze_text)
+
     else:
         # If no file is uploaded, create a .txt file with the title as the name
-        filename = f"{title}.txt"
-        file_path = os.path.join(directory, filename)
-        
-        # Check if the file already exists
-        if os.path.exists(file_path):
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            unique_filename = f"{title}_{timestamp}.txt"
-            file_path = os.path.join(directory, unique_filename)
+        unique_filename = f"{file_headder}_{title}_{timestamp}.txt"
+        file_path = os.path.join(directory, unique_filename)
         
         # Save the content as a .txt file
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
-            content = summarize_text(content)
+            content = summarize_text(content, file_path)
         except Exception as e:
             flash(f"Error occurred while saving the file: {e}", "error")
     
@@ -198,7 +206,7 @@ def summarize_upload_file():
         file_content = read_file_content(file_path)
 
         # Generate summary using OpenAI API
-        summary = summarize_text(file_content)
+        summary = summarize_text(file_content, file_path)
         
         return {'summary': summary}, 200
     except Exception as e:
@@ -293,21 +301,12 @@ def to_rfc3339(date_str, end_of_day=False):
     else:
         return f"{date_str}T00:00:00Z"
 
-@app.route('/search', methods=['POST'])
-def search():
-    # Handle search requests and display relevant articles.
-    prompt = request.form['prompt']
-     
-    # Get the current local time and format it
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Append the local time to the prompt with a label indicating it's local time
-    prompt = f"{prompt}\n\nLocal Time: {current_time}"
-  
+def search_articles(prompt):
     search_keywords = generate_search_keywords(prompt)
 
     if search_keywords is None:
-        flash("Failed to generate search keywords.", "error")
-        return redirect(url_for('index'))
+        print("Failed to generate search keywords.")
+        return None
 
     keywords = search_keywords.keywords
     objectives = search_keywords.objectives
@@ -375,15 +374,33 @@ def search():
             referenced_files.add(unique_file_identifier)
             filtered_articles.append(article)
 
-        if not filtered_articles:
+        return filtered_articles
+    except Exception as e:
+        print(f"Error occurred during search: {e}")
+        return None
+
+@app.route('/search', methods=['POST'])
+def search():
+    # Handle search requests and display relevant articles.
+    prompt = request.form['prompt']
+     
+    # Get the current local time and format it
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Append the local time to the prompt with a label indicating it's local time
+    prompt = f"{prompt}\n\nLocal Time: {current_time}"
+
+    try:
+        articles = search_articles(prompt)
+
+        if not articles:
             flash("No search results found.", "info")
             return redirect(url_for('index'))
 
         # Generate a report using the search prompt and references text
-        report_markdown = make_report(prompt, filtered_articles)
+        report_markdown = make_report(prompt, articles)
         report_html = markdown.markdown(report_markdown, extensions=['nl2br'])  # Convert Markdown to HTML
 
-        return render_template('index.html', articles=filtered_articles, report=report_html)
+        return render_template('index.html', articles=articles, report=report_html)
     except Exception as e:
         flash(f"Error occurred during search: {e}", "error")
         return redirect(url_for('index'))
@@ -433,6 +450,23 @@ def call_openai_api(model, contents=None, function_name="Unknown Function"):
         print(f"Error occurred during OpenAI API call in {function_name}: {e}")
         return None
 
+def load_analyzed_file_content(file_path, file_headder, file_analyze_headder):
+    path = Path(file_path)
+    
+    if path.name.startswith(file_headder):
+        new_file_name = path.name.replace(file_headder, file_analyze_headder, 1)
+        new_file_path = path.with_name(new_file_name).with_suffix('.txt')
+        
+        if new_file_path.exists():
+            try:
+                with new_file_path.open('r', encoding='utf-8', errors='ignore') as file:
+                    data = file.read()
+                return data
+            except Exception as e:
+                print(f"An error occurred while reading file: {e}")
+
+    return None
+
 def compare_texts(text1, text2):
     diff = list(difflib.ndiff(text1.splitlines(), text2.splitlines()))
     diff_info = "\n".join(diff)
@@ -470,17 +504,43 @@ def compare_files_with_llm(matching_file_count, comparison_test):
     except Exception as e:
         return f"Error: An issue occurred while comparing the files: {str(e)}"
 
-def summarize_text(text):
+def analyze_text_format(text):
     # Generate a summary of the provided text using OpenAI.
-    user_content = (
-        f"## Instructions\nPlease extract the following information from the document below:\n"
-        f"- Keywords that serve as an index for the document\n"
-        f"- Summarize each chapter, organizing the content into appropriate sections\n"
-        f"## Document\n{text}"
+    analyze_text_format_prompt = (
+        f"## Instruction\n"
+        f"Please list the characteristics of the sample text's format. Include considerations of layout elements, such as a two-column structure.\n"
+        f"## Sample\n"
+        f"{text}\n"
+        f"## Output\n"
+        f"(Analysis information only)\n"
     )
-    return call_openai_api(support_llm_model, contents=[get_system_role(), user_content], function_name="summarize_text")
+    return call_openai_api(support_llm_model, contents=[get_system_role(), analyze_text_format_prompt], function_name="analyze_text_format")
 
-def make_report(request_text, articles):
+def summarize_text(text, file_path):
+    # Generate a summary of the provided text using OpenAI.
+    analyze_text_info = load_analyzed_file_content(file_path, file_headder, file_analyze_headder)
+    if analyze_text_info:
+        analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
+    else:
+        if os.path.splitext(file_path)[1].lower() == '.pdf':
+            analyze_text_info = analyze_text_format(text)
+            analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
+
+    summarize_text_prompt = (
+        f"## Instruction\n"
+        f"Extract the following information from the document:\n"
+        f"- Keywords that serve as an index for the document\n"
+        f"- Summarize each chapter and organize the content into appropriate sections\n"
+        f"## Document Characteristics\n"
+        f"{analyze_text_info}"
+        f"## Document\n"
+        f"{text}"
+        f"## Output\n"
+        f"(Summary only)\n"
+    )
+    return call_openai_api(support_llm_model, contents=[get_system_role(), summarize_text_prompt], function_name="summarize_text")
+
+def extract_and_organize_data(request_text, articles):
     report_contents = []
 
     for article in articles:
@@ -489,16 +549,27 @@ def make_report(request_text, articles):
             continue
 
         file_content = read_file_content(file_path)
+
+        analyze_text_info = load_analyzed_file_content(file_path, file_headder, file_analyze_headder)
+        if analyze_text_info:
+            analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
+
         extract_matching_content = (
             f"## Instruction\n"
-            f"Please extract the relevant parts from the Supporting Materials that are useful for the user's request while maintaining consistency.\n"
-            f"## User's Request\n"
+            f"Extract information from the support materials that is useful for the user's request, maintaining consistency.\n"
+            f"## User Request\n"
             f"{request_text}\n"
-            f"## Supporting Materials\n"
+            f"{analyze_text_info}"
+            f"## Support Materials\n"
             f"{file_content}\n"
         )
-        file_summary = call_openai_api(support_llm_model, contents=[get_system_role(), extract_matching_content], function_name="make_report")
+        file_summary = call_openai_api(support_llm_model, contents=[get_system_role(), extract_matching_content], function_name="extract_and_organize_data")
         report_contents.append(f"### file:{os.path.basename(file_path)}\n{file_summary}\n")
+
+    return report_contents
+
+def make_report(request_text, articles):
+    report_contents = extract_and_organize_data(request_text, articles)
 
     base_user_content = (
         f"## Instructions\n"
@@ -513,22 +584,21 @@ def make_report(request_text, articles):
         base_user_content += "## Supporting Materials\nNo relevant files were found."
 
     first_response = call_openai_api(llm_model, contents=[get_system_role(), base_user_content], function_name="make_report")
-
+    
+    last_response = None
     if first_response:
         proofread_user_content = (
-            f"## Instruction\n"
-            f"Please proofread the text while paying attention to the following points. Provide only the corrected text.\n"
+            f"After critically reviewing your response, please proofread the text with the following points in mind:\n"
             f"- Are there any mistakes in numbers, names, or words?\n"
             f"- Are there any errors in translation?\n"
             f"- Does it align with the intended purpose?\n"
             f"- Is the format appropriate?\n"
             f"- Are there any omissions or missing elements?\n"
-            f"## output\n"
-            f"Revised text\n"
+            f"Please write only the final proofread text."
         )
-        return call_openai_api(llm_model, contents=[get_system_role(), base_user_content, first_response, proofread_user_content], function_name="make_report")
+        last_response = call_openai_api(llm_model, contents=[get_system_role(), base_user_content, first_response, proofread_user_content], function_name="make_report")
 
-    return None
+    return last_response
 
 def extract_user_intent(request_text):
     # Interprets the text to clarify what the user intends.
