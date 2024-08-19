@@ -227,6 +227,11 @@
             displayFileName();
         });
 
+        document.querySelector('form').addEventListener('submit', function(event) {
+            // フォーム送信時にファイル名の表示をリセット
+            document.getElementById('fileName').textContent = '';
+        });
+        
         document.addEventListener('DOMContentLoaded', function() {
             const textForm = document.querySelector('form[action="{{ url_for("save_text") }}"]');
             const searchForm = document.querySelector('form[action="{{ url_for("search") }}"]');
