@@ -21,6 +21,9 @@ TARGET_CLASS_NAME = os.getenv("ARTICLE_NAME", "Article")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 SUPPORT_LLM_MODEL = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
 
+WEAVIATE_SEARCH_DISTANCE = float(os.getenv("WEAVIATE_SEARCH_DISTANCE", "0.2"))
+WEAVIATE_SEARCH_LIMIT = int(os.getenv("WEAVIATE_SEARCH_LIMIT", "3"))
+
 FILE_HEADER = "file_"
 FILE_ANALYZE_HEADER = "analyze_"
 
@@ -341,7 +344,7 @@ def search_articles(prompt):
             .get(TARGET_CLASS_NAME, ["title", "content", "file_path", "date"])
             .with_near_text({
                 "concepts": keywords + objectives,
-                "distance": 0.2  # The closer the value is to 0, the better it matches the keywords and objectives.
+                "distance": WEAVIATE_SEARCH_DISTANCE # The closer the value is to 0, the better it matches the keywords and objectives.
             })
         )
 
@@ -374,7 +377,7 @@ def search_articles(prompt):
             else:
                 pass
 
-        result = query.with_limit(3).do()
+        result = query.with_limit(WEAVIATE_SEARCH_LIMIT).do()
 
         articles = result.get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
 

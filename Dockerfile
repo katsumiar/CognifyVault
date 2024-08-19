@@ -26,6 +26,10 @@ ENV OPENAI_API_KEY=
 ENV LLM_MODEL=gpt-4o-mini
 ## LLM model for support tasks
 ENV SUPPORT_LLM_MODEL=gpt-4o-mini
+## Which determines the closeness of the match to the search keywords
+ENV WEAVIATE_SEARCH_DISTANCE=0.2
+## Limits the number of references returned in search results
+ENV WEAVIATE_SEARCH_LIMIT=3
 
 # Run the application
 CMD ["python", "app.py"]
