@@ -430,7 +430,8 @@ def search():
             return redirect(url_for('index'))
         report_html = markdown.markdown(report_markdown, extensions=['nl2br'])  # Convert Markdown to HTML
 
-        return render_template('index.html', articles=articles, report=report_html)
+        supported_extensions = list(SUPPORTED_EXTENSIONS)
+        return render_template('index.html', articles=articles, report=report_html, supported_extensions=supported_extensions)
     except Exception as e:
         flash(f"Error occurred during search: {e}", "error")
         return redirect(url_for('index'))
