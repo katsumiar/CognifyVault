@@ -149,7 +149,7 @@ def save_text():
         os.makedirs(directory)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if file:
+    if file and file.filename:
         # If a file is uploaded, use the original file name
         filename = file.filename
         
@@ -172,8 +172,9 @@ def save_text():
             analyze_filename_with_header = f"{FILE_ANALYZE_HEADER}_{base_name}_{timestamp}.txt"
             analyze_file_path = os.path.join(directory, analyze_filename_with_header)
             analyze_text = analyze_text_format(file_content)
-            with open(analyze_file_path, 'w', encoding='utf-8') as f:
-                f.write(analyze_text)
+            if analyze_text:
+                with open(analyze_file_path, 'w', encoding='utf-8') as f:
+                    f.write(analyze_text)
 
     else:
         # If no file is uploaded, create a .txt file with the title as the name
@@ -216,7 +217,7 @@ def save_text():
 def summarize_upload_file():
     # File upload and return its summary.
     file = request.files.get('file')
-    if not file:
+    if not file or not file.filename:
         return {'error': 'No file provided'}, 400
     
     # Get temporary directory path
@@ -276,7 +277,7 @@ def check_title():
 def compare_similar_files():
     file = request.files.get('file')  # Retrieve the uploaded file
 
-    if not file:
+    if not file or not file.filename:
         return {'exists': False, 'message': 'No file uploaded or file not correctly received'}, 200
 
     temp_dir = tempfile.gettempdir()
@@ -423,6 +424,9 @@ def search():
 
         # Generate a report using the search prompt and references text
         report_markdown = make_report(prompt, articles)
+        if not report_markdown:
+            flash("Failed to generate the report.", "error")
+            return redirect(url_for('index'))
         report_html = markdown.markdown(report_markdown, extensions=['nl2br'])  # Convert Markdown to HTML
 
         return render_template('index.html', articles=articles, report=report_html)
@@ -466,6 +470,9 @@ def call_openai_api(model, contents=None, function_name="Unknown Function"):
             model=model,
             messages=messages
         )
+        if not response.choices[0].message.content:
+            print(f"No content returned from OpenAI API in {function_name}")
+            return None
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error occurred during OpenAI API call in {function_name}: {e}")
