@@ -171,7 +171,7 @@
                     Drag and drop knowledge files
                 </div>
                 <div class="file-name" id="fileName"></div>
-                <input type="file" name="file" id="fileInput" style="display:none;" accept=".txt,.pdf,.md">
+                <input type="file" name="file" id="fileInput" style="display:none;" accept="{{ ','.join(supported_extensions) }}">
                 <button type="submit" class="button">Register</button>
             </form>
 
@@ -210,17 +210,7 @@
         const fileInput = document.getElementById('fileInput');
         const fileNameDisplay = document.getElementById('fileName');
 
-        let supportedExtensions = [];
-
-        // サポートされている拡張子を取得
-        fetch('/supported_extensions')
-            .then(response => response.json())
-            .then(data => {
-                supportedExtensions = data.supported_extensions;
-            })
-            .catch(error => {
-                console.error('Error fetching supported extensions:', error);
-            });
+        const supportedExtensions = JSON.parse('{{ supported_extensions | tojson | safe }}');
 
         dragDropArea.addEventListener('click', () => fileInput.click());
         dragDropArea.addEventListener('dragover', (e) => {

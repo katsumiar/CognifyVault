@@ -134,7 +134,8 @@ def get_system_role():
 def index():
     # Render the main index page.
     system_role = get_system_role()
-    return render_template('index.html', system_role=system_role)
+    supported_extensions = list(SUPPORTED_EXTENSIONS)
+    return render_template('index.html', system_role=system_role, supported_extensions=supported_extensions)
 
 @app.route('/save_text', methods=['POST'])
 def save_text():
