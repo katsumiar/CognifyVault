@@ -114,7 +114,7 @@ def supported_extensions():
     return {"supported_extensions": list(SUPPORTED_EXTENSIONS)}, 200
 
 @app.before_request
-def set_language():
+def initialize_language():
     if 'language' not in session:
         session['language'] = get_default_language()
 
