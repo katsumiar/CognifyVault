@@ -7,8 +7,26 @@
 
 Register knowledge and files in a vector database, and generate information based on questions using the OpenAI API. This knowledge management and search support tool efficiently searches for relevant knowledge through vector search powered by Weaviate.
 
-## **Note:**
-Due to a change in the format of the data being saved, existing data will no longer be usable.
+### **Newly Supported File Formats**
+
+We have expanded the system's capabilities by adding support for the following file formats:
+
+- **Audio Files**:
+  - `.mp3`
+  - `.wav`
+  - `.m4a`
+
+- **Video Files**:
+  - `.mp4`
+  - `.avi`
+  - `.mov`
+  - `.flv`
+  - `.wmv`
+
+**Key Features**:
+- **Automatic Transcription**: Uploaded video files are automatically converted to audio, and both audio and video files are transcribed to text using OpenAI's Whisper model.
+- **Enhanced Analysis**: The transcribed text is processed and analyzed, enabling the system to generate summaries and perform vector searches based on the content of the audio and video files.
+- **Seamless Integration**: These new capabilities are seamlessly integrated into the existing framework, allowing users to upload and analyze a broader range of media formats with the same ease as text and PDF files.
 
 ## Functionality Improvements
 - **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
