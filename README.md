@@ -87,9 +87,18 @@ The application currently supports the following languages:
 If your preferred language is not listed, the default language is English (`en`).
 
 ## Supported File Formats
-- **Text Files (`.txt`)**
-- **PDF Files (`.pdf`)**
-- **Markdown Files (`.md`)**
+- Text Files (`.txt`, `.md`)
+- PDF Files (`.pdf`)
+- Audio Files:
+  - `.mp3`
+  - `.wav`
+  - `.m4a`
+- Video Files:
+  - `.mp4`
+  - `.avi`
+  - `.mov`
+  - `.flv`
+  - `.wmv`
 
 ## Prerequisites
 - Docker
