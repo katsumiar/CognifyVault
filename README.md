@@ -139,10 +139,15 @@ If your preferred language is not listed, the default language is English (`en`)
 - Use the "Extract knowledge" section to ask questions and receive responses based on the registered knowledge.
 
 ## Environment Variables
-- `WEAVIATE_SERVER`: The URL for the Weaviate server. Default is `http://localhost:8080`.
-- `ARTICLE_NAME`: The class name used in Weaviate for storing articles. Default is `Article`.
-- `LLM_MODEL`: The name of the OpenAI model to be used. Default is `gpt-4o-mini`.
-- `SUPPORT_LLM_MODEL`: The support model name for OpenAI. Default is `gpt-4o-mini`.
+- `WEAVIATE_SERVER`: The URL for the Weaviate server. Default is `http://weaviate:8080`.
+- `COGNIFY_VAULT_PORT`: The public port number for CognifyVault. Default is `5000`.
+- `ARTICLE_NAME`: The class name used in Weaviate for storing articles. Default is `ArticleV2`.
+- `OPENAI_API_KEY`: The API key for accessing OpenAI services.
+- `LLM_MODEL`: The model used for handling critical tasks. Default is `gpt-4o-mini`.
+- `SUPPORT_LLM_MODEL`: The model used for support tasks. Default is `gpt-4o-mini`.
+- `SPEECH_TO_TEXT_MODEL`: The model used for speech-to-text processing. Default is `whisper-1`.
+- `WEAVIATE_SEARCH_DISTANCE`: Determines the closeness of the match to the search keywords. Default is `0.2`.
+- `WEAVIATE_SEARCH_LIMIT`: Limits the number of references returned in search results. Default is `3`.
 
 ## License
 
