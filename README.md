@@ -39,15 +39,15 @@ We have expanded the system's capabilities by adding support for the following f
 
 ## Features
 - **Knowledge Registration**: Register knowledge by directly entering text or uploading files (supports `.txt`, `.pdf`, and `.md` formats).
-  - **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
-  - **Duplicate Title Check**: Before saving a new title, the system checks for any existing titles with the same name and prompts the user to confirm if a duplicate is found.
+- **Title Warning**: When registering or editing a title, if the entered title matches an existing one, a red warning is displayed to alert the user of the duplication.
+- **Duplicate Title Check**: Before saving a new title, the system checks for any existing titles with the same name and prompts the user to confirm if a duplicate is found.
 - **Knowledge Extraction**: Ask questions and get responses based on the registered knowledge.
-  - **Enhanced AI Prompts**: Optimized the interaction with OpenAI API, leading to more accurate and relevant responses based on user queries.
+- **Enhanced AI Prompts**: Optimized the interaction with OpenAI API, leading to more accurate and relevant responses based on user queries.
 - **File Summarization**: Automatically generate summaries for uploaded files using the OpenAI API.
-  - **Duplicate File Check**: When uploading a file, the system checks if the content matches an existing file and warns the user of the duplication before proceeding.
-  - **Improved PDF Text Extraction**: Enhanced the accuracy of text extraction from PDF files by removing unnecessary line breaks and spaces.
+- **Duplicate File Check**: When uploading a file, the system checks if the content matches an existing file and warns the user of the duplication before proceeding.
+- **Improved PDF Text Extraction**: Enhanced the accuracy of text extraction from PDF files by removing unnecessary line breaks and spaces.
 - **Vector Search**: Efficiently search through registered knowledge using vector search powered by Weaviate.
-  - **Optimized Reference Handling**: Improved the consistency and accuracy of search results by preventing the referencing of duplicate files.
+- **Optimized Reference Handling**: Improved the consistency and accuracy of search results by preventing the referencing of duplicate files.
 
 ## Report Generation Feature
 
