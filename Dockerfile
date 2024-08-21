@@ -4,6 +4,9 @@ FROM python:3.9-slim
 # Set the working directory
 WORKDIR /app
 
+# Install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Copy the application code
 COPY . /app
 
@@ -26,6 +29,8 @@ ENV OPENAI_API_KEY=
 ENV LLM_MODEL=gpt-4o-mini
 ## LLM model for support tasks
 ENV SUPPORT_LLM_MODEL=gpt-4o-mini
+## Speech-to-text model
+ENV SPEECH_TO_TEXT_MODEL=whisper-1
 ## Which determines the closeness of the match to the search keywords
 ENV WEAVIATE_SEARCH_DISTANCE=0.2
 ## Limits the number of references returned in search results

@@ -14,21 +14,27 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
+from pydub import AudioSegment
+import subprocess
 
 WEAVIATE_SERVER = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
 TARGET_CLASS_NAME = os.getenv("ARTICLE_NAME", "Article")
 
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 SUPPORT_LLM_MODEL = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
+SPEECH_TO_TEXT_MODEL = os.getenv("SPEECH_TO_TEXT_MODEL", "whisper-1")
 
 WEAVIATE_SEARCH_DISTANCE = float(os.getenv("WEAVIATE_SEARCH_DISTANCE", "0.2"))
 WEAVIATE_SEARCH_LIMIT = int(os.getenv("WEAVIATE_SEARCH_LIMIT", "3"))
 
 FILE_HEADER = "file_"
 FILE_ANALYZE_HEADER = "analyze_"
+TRANSCRIBED_HEADER = "Transcribed_"
 
 TEXT_EXTENSIONS = {'.txt', '.md' }
-SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | {'.pdf'}
+AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a'}
+VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.flv', '.wmv'}
+SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS | {'.pdf'}
 
 LANGUAGES = {
     'en': 'English',
@@ -108,6 +114,14 @@ def is_supported_file(extension):
     # Determines if the file extension is one of the supported types.
     return extension.lower() in SUPPORTED_EXTENSIONS
 
+def is_audio_file(extension):
+    # Determines if the file is an audio file
+    return extension.lower() in AUDIO_EXTENSIONS
+
+def is_video_file(extension):
+    # Determines if the file is a video file
+    return extension.lower() in VIDEO_EXTENSIONS
+
 @app.route('/supported_extensions', methods=['GET'])
 def supported_extensions():
     # Returns a list of supported file extensions.
@@ -141,6 +155,7 @@ def index():
 def save_text():
     title = request.form['title']
     content = request.form['content']
+    upload_content = request.form['upload_content']
     
     file = request.files.get('file')
     file_path = None
@@ -176,6 +191,13 @@ def save_text():
             if analyze_text:
                 with open(analyze_file_path, 'w', encoding='utf-8') as f:
                     f.write(analyze_text)
+        
+        if is_audio_file(ext) or is_video_file(ext):
+            transcribed_filename_with_header = f"{TRANSCRIBED_HEADER}_{base_name}_{timestamp}.txt"
+            transcribed_file_path = os.path.join(directory, transcribed_filename_with_header)
+            if upload_content:
+                with open(transcribed_file_path, 'w', encoding='utf-8') as f:
+                    f.write(upload_content)
 
     else:
         # If no file is uploaded, create a .txt file with the title as the name
@@ -231,11 +253,18 @@ def summarize_upload_file():
 
         # Read the content of the PDF file
         file_content = read_file_content(file_path)
+        ext = os.path.splitext(file_path)[1].lower()
+        upload_content = None
+        if is_audio_file(ext) or is_video_file(ext):
+            upload_content = file_content.replace(' ', '\n')
 
         # Generate summary using OpenAI API
         summary = summarize_text(file_content, file_path)
         
-        return {'summary': summary}, 200
+        return {
+            'summary': summary,
+            'upload_content': upload_content
+        }, 200
     except Exception as e:
         return {'error': f'Error occurred while generating summary: {e}'}, 500
     finally:
@@ -443,7 +472,14 @@ def read_file_content(file_path):
         if is_text_file(file_extension):
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
-        elif file_extension.lower() == '.pdf':
+        elif is_audio_file(file_extension) or is_video_file(file_extension):
+            text = load_subfile_content(file_path, FILE_HEADER, TRANSCRIBED_HEADER)
+            if text:
+                return text
+            text = transcribe_audio(file_path, "read_file_content")
+            # text = transcription_correction(text)
+            return text
+        elif file_extension == '.pdf':
             with pdfplumber.open(file_path) as pdf:
                 text = ''
                 for page in pdf.pages:
@@ -480,11 +516,89 @@ def call_openai_api(model, contents=None, function_name="Unknown Function"):
         print(f"Error occurred during OpenAI API call in {function_name}: {e}")
         return None
 
-def load_analyzed_file_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER):
+def convert_video_to_mp3(video_path):
+    # Generate a temporary MP3 file
+    mp3_path = tempfile.mktemp(suffix=".mp3")
+    try:
+        # Convert video to mp3 using ffmpeg command
+        command = ['ffmpeg', '-i', video_path, '-q:a', '0', '-map', 'a', mp3_path]
+        subprocess.run(command, check=True)
+        return mp3_path
+    except Exception as e:
+        # Ensure temporary MP3 file is deleted if conversion fails
+        if os.path.exists(mp3_path):
+            os.remove(mp3_path)
+        raise e
+
+def transcribe_audio(file_path, function_name="Unknown Function"):
+    temp_files = []
+    try:
+        # Get the file extension to determine if it is a video
+        _, extension = os.path.splitext(file_path)
+        
+        if is_video_file(extension):
+            # Convert video files to MP3
+            file_path = convert_video_to_mp3(file_path)
+        
+        language = session.get('language', 'en')
+
+        audio = AudioSegment.from_file(file_path)
+        
+        ten_minutes = 10 * 60 * 1000  # Calculate 10 minutes in milliseconds
+        total_duration = len(audio)  # Get the total length of the audio (in milliseconds)
+        
+        transcripts = []
+
+        for start_time in range(0, total_duration, ten_minutes):
+            end_time = min(start_time + ten_minutes + 5000, total_duration)
+            segment = audio[start_time:end_time]
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+                segment.export(temp_file.name, format="mp3")
+                temp_files.append(temp_file.name)
+
+        for temp_file in temp_files:
+            try:
+                with open(temp_file, 'rb') as audio_file:
+                    transcript = openai_client.audio.transcriptions.create(
+                        model=SPEECH_TO_TEXT_MODEL,
+                        file=audio_file,
+                        prompt="Improve your reading by removing anything that is not necessary for understanding the conversation and correcting any typos or words that you may have misheard.",
+                        language=language
+                    )
+                    transcripts.append(transcript.text)
+            except Exception as api_error:
+                print(f"API call failed for file {temp_file}: {api_error}")
+        
+        # Combine all text
+        full_transcript = " ".join(transcripts)
+
+        return full_transcript
+
+    except Exception as e:
+        print(f"Error occurred during OpenAI API call in {function_name}: {e}")
+        return f"{e}"
+    
+    finally:
+        # Ensure all temporary files are deleted
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except OSError as e:
+                print(f"Error removing temporary file {temp_file}: {e}")
+        
+        # If a video file was converted to MP3, delete the temporary MP3 file
+        if is_video_file(extension):
+            try:
+                os.remove(file_path)
+            except OSError as e:
+                print(f"Error removing temporary MP3 file {file_path}: {e}")
+
+def load_subfile_content(file_path, FILE_HEADER, subfile_type):
     path = Path(file_path)
     
     if path.name.startswith(FILE_HEADER):
-        new_file_name = path.name.replace(FILE_HEADER, FILE_ANALYZE_HEADER, 1)
+        new_file_name = path.name.replace(FILE_HEADER, subfile_type, 1)
         new_file_path = path.with_name(new_file_name).with_suffix('.txt')
         
         if new_file_path.exists():
@@ -546,13 +660,26 @@ def analyze_text_format(text):
     )
     return call_openai_api(SUPPORT_LLM_MODEL, contents=[get_system_role(), analyze_text_format_prompt], function_name="analyze_text_format")
 
+def transcription_correction(text):
+    transcription_correction_prompt = (
+        f"## Instruction\n"
+        f"Please correct and improve the transcribed text from the audio file by fixing any typographical errors or likely misheard words to make it more readable.\n"
+        f"## Transcribed Text\n"
+        f"{text}"
+        f"## Output\n"
+        f"(Corrected Text)\n"
+    )
+    return call_openai_api(SUPPORT_LLM_MODEL, contents=[get_system_role(), transcription_correction_prompt], function_name="summarize_text")
+
 def summarize_text(text, file_path):
     # Generate a summary of the provided text using OpenAI.
-    analyze_text_info = load_analyzed_file_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER)
+    ext = os.path.splitext(file_path)[1].lower()
+
+    analyze_text_info = load_subfile_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER)
     if analyze_text_info:
         analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
     else:
-        if os.path.splitext(file_path)[1].lower() == '.pdf':
+        if ext == '.pdf':
             analyze_text_info = analyze_text_format(text)
             analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
 
@@ -580,7 +707,7 @@ def extract_and_organize_data(request_text, articles):
 
         file_content = read_file_content(file_path)
 
-        analyze_text_info = load_analyzed_file_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER)
+        analyze_text_info = load_subfile_content(file_path, FILE_HEADER, FILE_ANALYZE_HEADER)
         if analyze_text_info:
             analyze_text_info = f"## Characteristics of the Support Materials\n{analyze_text_info}\n"
 

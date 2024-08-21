@@ -3,3 +3,4 @@ weaviate-client
 openai
 pdfplumber
 markdown
+pydub

@@ -172,6 +172,7 @@
                 </div>
                 <div class="file-name" id="fileName"></div>
                 <input type="file" name="file" id="fileInput" style="display:none;" accept="{{ ','.join(supported_extensions) }}">
+                <textarea name="upload_content" rows="10" style="display:none;"></textarea>
                 <button type="submit" class="button">Register</button>
             </form>
 
@@ -325,6 +326,11 @@
             })
             .then(response => response.json())
             .then(data => {
+                if (data.upload_content) {
+                    const editableTextarea = document.querySelector('textarea[name="upload_content"]');
+                    editableTextarea.value = data.upload_content;
+                    editableTextarea.style.display = 'block'; // Show the textarea
+                }
                 if (data.summary) {
                     document.querySelector('textarea[name="content"]').value = data.summary;
                 } else {
