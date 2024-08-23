@@ -7,6 +7,15 @@
 
 Register knowledge and files in a vector database, and generate information based on questions using the OpenAI API. This knowledge management and search support tool efficiently searches for relevant knowledge through vector search powered by Weaviate.
 
+### Caution
+
+The `ARTICLE_NAME` environment variable has been changed to `ARTICLE_NAMES`. With this change, it is now possible to specify multiple article names as a comma-separated list.
+
+#### Details:
+- The `ARTICLE_NAME` environment variable has been changed to `ARTICLE_NAMES`.
+- `ARTICLE_NAMES` can now be specified as a comma-separated list of multiple names.
+- In the UI, the specified names will be displayed as a dropdown list, allowing users to select and switch between article names.
+
 ### **Newly Supported File Formats**
 
 We have expanded the system's capabilities by adding support for the following file formats:
@@ -141,7 +150,7 @@ If your preferred language is not listed, the default language is English (`en`)
 ## Environment Variables
 - `WEAVIATE_SERVER`: The URL for the Weaviate server. Default is `http://weaviate:8080`.
 - `COGNIFY_VAULT_PORT`: The public port number for CognifyVault. Default is `5000`.
-- `ARTICLE_NAME`: The class name used in Weaviate for storing articles. Default is `ArticleV2`.
+- `ARTICLE_NAMES`: The class name used in Weaviate for storing articles. Default is `ArticleV1_1,ArticleV1_2,ArticleV1_3`.
 - `OPENAI_API_KEY`: The API key for accessing OpenAI services.
 - `LLM_MODEL`: The model used for handling critical tasks. Default is `gpt-4o-mini`.
 - `SUPPORT_LLM_MODEL`: The model used for support tasks. Default is `gpt-4o-mini`.

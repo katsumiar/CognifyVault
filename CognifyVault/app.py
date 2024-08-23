@@ -18,7 +18,6 @@ from pydub import AudioSegment
 import subprocess
 
 WEAVIATE_SERVER = os.getenv("WEAVIATE_SERVER", "http://localhost:8080")
-TARGET_CLASS_NAME = os.getenv("ARTICLE_NAME", "Article")
 
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 SUPPORT_LLM_MODEL = os.getenv("SUPPORT_LLM_MODEL", "gpt-4o-mini")
@@ -35,6 +34,11 @@ TEXT_EXTENSIONS = {'.txt', '.md' }
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a'}
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.flv', '.wmv'}
 SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS | {'.pdf'}
+
+ARTICLE_NAMES = os.getenv("ARTICLE_NAMES", "ArticleV1_1,ArticleV1_2,ArticleV1_3").split(',')
+DEFAULT_ARTICLE_NAME = ARTICLE_NAMES[0]
+
+current_article_name = DEFAULT_ARTICLE_NAME
 
 LANGUAGES = {
     'en': 'English',
@@ -58,10 +62,26 @@ client = weaviate.Client(
 
 openai_client = OpenAI() # os.getenv("OPENAI_API_KEY")
 
-def create_weaviate_class():
+def get_current_article():
+    if 'current_article' not in session:
+        session['current_article'] = DEFAULT_ARTICLE_NAME
+    return session.get('current_article', DEFAULT_ARTICLE_NAME)
+
+@app.route('/set_article', methods=['POST'])
+def set_article():
+    selected_article = request.form.get('article_name')
+    if selected_article and selected_article in ARTICLE_NAMES:
+        session['current_article'] = selected_article
+        flash(f"Switched to article: {selected_article}", "success")
+    else:
+        flash("Invalid article name selected.", "error")
+        return redirect(url_for('index')), 400
+    return redirect(url_for('index'))
+
+def create_weaviate_class(article_name):
     # Create a class in Weaviate to store articles if it doesn't already exist.
     class_obj = {
-        "class": TARGET_CLASS_NAME,
+        "class": article_name,
         "description": "A class to store articles",
         "vectorizer": "text2vec-openai",  # Specify the embedding model
         "properties": [
@@ -85,11 +105,31 @@ def create_weaviate_class():
     }
     
     existing_classes = client.schema.get().get('classes', [])
-    if not any(c['class'] == TARGET_CLASS_NAME for c in existing_classes):
+    if not any(c['class'] == article_name for c in existing_classes):
         client.schema.create_class(class_obj)
-        print(f"Class '{TARGET_CLASS_NAME}' created.")
+        print(f"Class '{article_name}' created.")
     else:
-        print(f"Class '{TARGET_CLASS_NAME}' already exists.")
+        print(f"Class '{article_name}' already exists.")
+
+@app.route('/clear_database', methods=['POST'])
+def clear_database():
+    try:
+        current_article_name = get_current_article()
+        client.schema.delete_class(current_article_name)
+        create_weaviate_class(current_article_name)
+        return {'success': True}, 200
+    except Exception as e:
+        return {'success': False, 'error': str(e)}, 500
+
+@app.route('/get_record_count', methods=['GET'])
+def get_record_count():
+    try:
+        current_article_name = get_current_article()
+        result = client.query.aggregate(current_article_name).with_meta_count().do()
+        count = result['data']['Aggregate'][current_article_name][0]['meta']['count']
+        return {'success': True, 'count': count}, 200
+    except Exception as e:
+        return {'success': False, 'error': str(e)}, 500
 
 def get_default_language():
     supported_languages = ['en', 'es', 'fr', 'de', 'ja', 'zh']
@@ -144,12 +184,31 @@ def get_system_role():
     system_role = f"You are an assistant responsible for communication in {LANGUAGES[language]}. Your role involves managing documents and preparing materials. You have a meticulous personality, prioritizing accuracy, and you provide responses that are both careful and nuanced."
     return system_role
 
+def format_datetime(iso_string):
+    dt = datetime.fromisoformat(iso_string.rstrip("Z"))
+    return dt.strftime('%Y/%m/%d %H:%M:%S')
+
 @app.route('/')
 def index():
     # Render the main index page.
     system_role = get_system_role()
     supported_extensions = list(SUPPORTED_EXTENSIONS)
-    return render_template('index.html', system_role=system_role, supported_extensions=supported_extensions)
+    article_names = ARTICLE_NAMES
+    current_article_name = get_current_article()
+    articles_data = client.query.get(current_article_name, ["title", "content", "file_path", "date"]).do()
+    articles_list = articles_data['data']['Get'][current_article_name]
+
+    for article in articles_list:
+        if 'date' in article:
+            article['date'] = format_datetime(article['date'])
+
+    article_count = len(articles_list)
+    return render_template('index.html',
+                           system_role=system_role,
+                           supported_extensions=supported_extensions,
+                           article_names=article_names,
+                           articles_data=articles_data,
+                           article_count=article_count)
 
 @app.route('/save_text', methods=['POST'])
 def save_text():
@@ -160,7 +219,8 @@ def save_text():
     file = request.files.get('file')
     file_path = None
 
-    directory = os.path.join(f"uploaded_files_{TARGET_CLASS_NAME}")
+    current_article_name = get_current_article()
+    directory = os.path.join(f"uploaded_files_{current_article_name}")
     if not os.path.exists(directory):
         os.makedirs(directory)
 
@@ -228,7 +288,7 @@ def save_text():
         # Store the data object in Weaviate
         client.data_object.create(
             data_object=data_object,
-            class_name=TARGET_CLASS_NAME
+            class_name=get_current_article()
         )
         flash("Text and file saved successfully.", "success")
     except Exception as e:
@@ -278,7 +338,8 @@ def download_file():
     file_path = request.args.get('file_path')
     
     if file_path:
-        safe_path = os.path.join(f"uploaded_files_{TARGET_CLASS_NAME}", os.path.basename(file_path))
+        current_article_name = get_current_article()
+        safe_path = os.path.join(f"uploaded_files_{current_article_name}", os.path.basename(file_path))
         
         if os.path.exists(safe_path):
             try:
@@ -296,7 +357,8 @@ def download_file():
 @app.route('/check_title')
 def check_title():
     title = request.args.get('title')
-    existing_titles = client.query.get(TARGET_CLASS_NAME, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
+    current_article_name = get_current_article()
+    existing_titles = client.query.get(current_article_name, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(current_article_name, [])
     for article in existing_titles:
         if article['title'] == title:
             return {'exists': True}, 200
@@ -320,7 +382,8 @@ def compare_similar_files():
         # Read the content of the uploaded file
         uploaded_file_content = read_file_content(upload_file_path)
 
-        existing_titles = client.query.get(TARGET_CLASS_NAME, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
+        current_article_name = get_current_article()
+        existing_titles = client.query.get(current_article_name, ["title", "file_path"]).do().get('data', {}).get('Get', {}).get(current_article_name, [])
 
         matching_file_count = 0
         comparison_info = ""
@@ -370,9 +433,10 @@ def search_articles(prompt):
 
     try:
         # Initial query with keywords
+        current_article_name = get_current_article()
         query = (
             client.query
-            .get(TARGET_CLASS_NAME, ["title", "content", "file_path", "date"])
+            .get(current_article_name, ["title", "content", "file_path", "date"])
             .with_near_text({
                 "concepts": keywords + objectives,
                 "distance": WEAVIATE_SEARCH_DISTANCE # The closer the value is to 0, the better it matches the keywords and objectives.
@@ -410,7 +474,8 @@ def search_articles(prompt):
 
         result = query.with_limit(WEAVIATE_SEARCH_LIMIT).do()
 
-        articles = result.get('data', {}).get('Get', {}).get(TARGET_CLASS_NAME, [])
+        current_article_name = get_current_article()
+        articles = result.get('data', {}).get('Get', {}).get(current_article_name, [])
 
         referenced_files = set()
         filtered_articles = []
@@ -797,9 +862,12 @@ def generate_search_keywords(prompt):
 
 if __name__ == '__main__':
     # Ensure the upload directory exists
-    directory = os.path.join(f"uploaded_files_{TARGET_CLASS_NAME}")
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    create_weaviate_class()
+    for article_name in ARTICLE_NAMES:
+        create_weaviate_class(article_name)
+        
+        directory = os.path.join(f"uploaded_files_{article_name}")
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
     port = int(os.getenv("COGNIFY_VAULT_PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

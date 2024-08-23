@@ -127,6 +127,27 @@
             border-color: red;
             background-color: #f8d7da;
         }
+        p {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        tbody tr:hover {
+            background-color: #f1f1f1;
+        }
     </style>
 </head>
 <body>
@@ -149,8 +170,17 @@
                 </select>
             </form>
             
+            <form action="{{ url_for('set_article') }}" method="post">
+                <label for="article-select">Select Article:</label>
+                <select name="article_name" id="article-select" onchange="this.form.submit()">
+                    {% for article in article_names %}
+                        <option value="{{ article }}" {% if session['current_article'] == article %}selected{% endif %}>{{ article }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            
             <h1 class="title-with-icon">CognifyVault</h1>
-
+            
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     <ul>
@@ -184,6 +214,28 @@
         </div>
 
         <div class="report-container">
+            {% if not report %}
+                <h2>Articles in {{ session['current_article'] }}</h2>
+                <p>Total Records: {{ article_count }}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for article in articles_data['data']['Get'][session['current_article']] %}
+                        <tr>
+                            <td>{{ article['title'] }}</td>
+                            <td>{{ article['date'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button id="clearButton" class="button">Clear Database</button>
+            {% endif %}
+                        
             {% if report %}
                 <div class="report">
                     <h2>Report</h2>
@@ -405,6 +457,22 @@
             document.querySelector('.container').classList.add('disabled');
             document.getElementById('loadingIndicator').style.display = 'flex';
         }
+
+        document.getElementById('clearButton').addEventListener('click', function() {
+            if (confirm("Are you sure you want to clear the database?")) {
+                fetch('/clear_database', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                    }
+                })
+                .catch(error => {
+                    alert("Error occurred: " + error);
+                });
+            }
+        });
     </script>
 </body>
 </html>
