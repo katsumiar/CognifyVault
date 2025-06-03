@@ -850,15 +850,18 @@ def generate_search_keywords(prompt):
         f"List your objectives, keywords, and any relevant dates (if applicable), separated by commas.\n"
     )
 
-    response = openai_client.beta.chat.completions.parse(
+    response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": get_system_role()},
             {"role": "user", "content": user_content},
         ],
-        response_format=SearchKeywords,
+        response_format={"type": "json_object"},
     )
-    return response.choices[0].message.parsed
+
+    return SearchKeywords.model_validate_json(
+        response.choices[0].message.content
+    )
 
 if __name__ == '__main__':
     # Ensure the upload directory exists
